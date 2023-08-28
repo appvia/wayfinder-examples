@@ -5,10 +5,6 @@ metadata:
 spec:
   summary: General purpose GKE cluster network using assignable IP ranges
 
-  allocation:
-    type: all
-    workspaces: ["*"]
-
   assignableNetworks:
   - gcp-nonprod
   - gcp-prod

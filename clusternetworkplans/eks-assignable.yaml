@@ -5,10 +5,6 @@ metadata:
 spec:
   summary: General purpose EKS cluster network using assignable IP ranges
 
-  allocation:
-    type: all
-    workspaces: ["*"]
-
   assignableNetworks:
   - aws-nonprod
   - aws-prod
