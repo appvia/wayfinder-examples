@@ -1,0 +1,16 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessRole
+metadata:
+  name: namespace.admin
+spec:
+  accessRoleTemplate:
+    description: Full namespace administration
+    clusterScope: false
+    rules:
+    - verbs:
+      - '*'
+      apiGroups:
+      - '*'
+      - '*/*'
+      resources:
+      - '*'

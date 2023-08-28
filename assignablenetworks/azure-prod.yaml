@@ -1,0 +1,12 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: AssignableNetwork
+metadata:
+  name: azure-prod
+spec:
+  provider: azure
+  stage: prod
+  networks:
+  - range: 10.32.0.0/13
+    type: node
+  - range: 10.40.0.0/13
+    type: service

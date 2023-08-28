@@ -1,0 +1,51 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessRole
+metadata:
+  name: namespace.view
+spec:
+  accessRoleTemplate:
+    description: Read-only access to standard resources, excluding secrets
+    clusterScope: false
+    rules:
+    # Read-only access to all standard v1 namespaced resources excluding secrets:
+    - verbs:
+      - 'get'
+      - 'list'
+      - 'watch'
+      apiGroups:
+      - ''
+      resources:
+      - 'bindings'
+      - 'configmaps'
+      - 'endpoints'
+      - 'events'
+      - 'limitranges'
+      - 'persistentvolumeclaims'
+      - 'pods'
+      - 'pods/log'
+      - 'podtemplates'
+      - 'replicationcontrollers'
+      - 'resourcequotas'
+      - 'serviceaccounts'
+      - 'services'
+
+    # Read-only access to these additional API groups:
+    - verbs:
+      - 'get'
+      - 'list'
+      - 'watch'
+      apiGroups:
+      # Additional standard kube groups:
+      - 'apps'
+      - 'batch'
+      - 'autoscaling'
+      - 'networking.k8s.io'
+      - 'authentication.k8s.io'
+      - 'authorization.k8s.io'
+      - 'rbac.authorization.k8s.io'
+      # Additional capabilities we typically deploy:
+      - 'cert-manager.io'
+      - 'helm.toolkit.fluxcd.io'
+      - 'source.toolkit.fluxcd.io'
+      resources:
+      - '*'

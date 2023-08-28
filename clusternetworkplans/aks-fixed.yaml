@@ -1,0 +1,16 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: ClusterNetworkPlan
+metadata:
+  name: aks-fixed
+spec:
+  summary: General purpose AKS cluster network using static IP addressing
+
+  template:
+    plan: aks-fixed
+    provider: azure
+    ipv4:
+      cidrBlocks:
+      - type: node
+        cidr: 10.0.0.0/21
+      - type: service
+        cidr: 172.16.0.0/16

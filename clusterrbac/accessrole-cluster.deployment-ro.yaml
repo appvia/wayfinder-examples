@@ -1,0 +1,31 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessRole
+metadata:
+  name: cluster.deployment-readonly
+spec:
+  accessRoleTemplate:
+    description: Cluster-wide read access to resources required for namespace deployments using access tokens
+    clusterScope: true
+    rules:
+      - verbs:
+          - get
+          - list
+          - watch
+        apiGroups:
+          - ''
+          - policy
+          - rbac.authorization.k8s.io
+        resources:
+          - clusterrolebindings
+          - clusterroles
+          - namespaces
+          - nodes
+          - podsecuritypolicies
+      - verbs:
+          - get
+          - list
+          - watch
+        apiGroups:
+          - cert-manager.io
+        resources:
+          - '*'

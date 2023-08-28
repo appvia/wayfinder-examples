@@ -1,0 +1,15 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessRole
+metadata:
+  name: namespace.daemonset
+spec:
+  accessRoleTemplate:
+    description: Provisioning of daemonsets to a namespace for deployments using access tokens
+    clusterScope: false
+    rules:
+      - verbs:
+          - '*'
+        apiGroups:
+          - apps
+        resources:
+          - daemonsets

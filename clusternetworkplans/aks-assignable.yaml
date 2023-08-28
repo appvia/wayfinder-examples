@@ -1,0 +1,24 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: ClusterNetworkPlan
+metadata:
+  name: aks-assignable
+spec:
+  summary: General purpose AKS cluster network using assignable IP ranges
+
+  allocation:
+    type: all
+    workspaces: ["*"]
+
+  assignableNetworks:
+  - azure-nonprod
+  - azure-prod
+
+  template:
+    plan: aks-assignable
+    provider: azure
+    ipv4:
+      cidrBlocks:
+      - type: node
+        size: 21
+      - type: service
+        size: 21

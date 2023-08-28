@@ -1,0 +1,16 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessPolicy
+metadata:
+  name: viewer.prod
+spec:
+  accessPolicyTemplate:
+    description: View access to production clusters
+    accessRoleRefs: [ "cluster.view", "namespace.view" ]
+    groups: [ "viewer" ]
+    subjectType: User
+    constraints:
+      ttl: 8h00m0s
+      clusters:
+        allowed:
+          matchLabels:
+            "appvia.io/stage": "prod"

@@ -1,0 +1,7 @@
+apiVersion: org.appvia.io/v2beta1
+kind: Stage
+metadata:
+  name: prod
+spec:
+  displayName: Production
+  description: Used for production environments

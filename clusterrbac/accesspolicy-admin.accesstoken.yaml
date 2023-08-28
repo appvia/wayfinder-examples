@@ -1,0 +1,12 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessPolicy
+metadata:
+  name: admin.accesstoken
+spec:
+  accessPolicyTemplate:
+    description: Allows workspace owners to assign deployment roles to access tokens
+    accessRoleRefs: [ "cluster.deployment-readonly", "cluster.deployment",  "namespace.deployment", "namespace.daemonset" ]
+    wayfinderGroups: [ "admin" ]
+    groups: [ "owner" ]
+    subjectType: AccessToken
+    constraints: {}

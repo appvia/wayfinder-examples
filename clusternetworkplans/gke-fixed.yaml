@@ -1,0 +1,18 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: ClusterNetworkPlan
+metadata:
+  name: gke-fixed
+spec:
+  summary: General purpose GKE cluster network using static IP addressing
+
+  template:
+    plan: gke-fixed
+    provider: gcp
+    ipv4:
+      cidrBlocks:
+      - type: node
+        cidr: 10.0.0.0/20
+      - type: service
+        cidr: 10.8.0.0/20
+      - type: pod
+        cidr: 10.16.0.0/18

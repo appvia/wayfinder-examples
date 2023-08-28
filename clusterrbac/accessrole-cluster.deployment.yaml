@@ -1,0 +1,111 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessRole
+metadata:
+  name: cluster.deployment
+spec:
+  accessRoleTemplate:
+    description: |
+      Provision standard resources for access token deployments to any namespace in a cluster
+    clusterScope: true
+    rules:
+    # This section is identical to cluster.deployment-readonly:
+    - verbs:
+        - get
+        - list
+        - watch
+      apiGroups:
+        - ''
+        - policy
+        - rbac.authorization.k8s.io
+      resources:
+        - clusterrolebindings
+        - clusterroles
+        - namespaces
+        - nodes
+        - podsecuritypolicies
+    - verbs:
+        - get
+        - list
+        - watch
+      apiGroups:
+        - cert-manager.io
+      resources:
+        - '*'
+    # This section is identical to namespace.deployment:
+    - verbs:
+        - '*'
+      apiGroups:
+        - ''
+      resources:
+        - configmaps
+        - endpoints
+        - events
+        - persistentvolumeclaims
+        - persistentvolumes
+        - pods
+        - secrets
+        - serviceaccounts
+        - services
+    - verbs:
+        - '*'
+      apiGroups:
+        - apps
+        - batch
+        - coordination.k8s.io
+        - extensions
+        - networking.k8s.io
+      resources:
+        - cronjobs
+        - deployments
+        - deployments/rollback
+        - deployments/scale
+        - frontendconfigs
+        - ingressclasses
+        - ingresses
+        - jobs
+        - networkpolicies
+        - replicasets
+        - replicasets/scale
+        - replicationcontrollers/scale
+        - statefulsets
+        - statefulsets/scale
+    - verbs:
+        - '*'
+      apiGroups:
+        - policy
+      resources:
+        - poddisruptionbudgets
+    - verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+      apiGroups:
+        - rbac.authorization.k8s.io
+      resources:
+        - roles
+        - rolebindings
+    - verbs:
+        - '*'
+      apiGroups:
+        - autoscaling
+      resources:
+        - horizontalpodautoscalers
+        - verticalpodautoscalers
+    - verbs:
+        - '*'
+      apiGroups:
+        - acme.cert-manager.io
+        - cert-manager.io
+        - helm.toolkit.fluxcd.io
+        - source.toolkit.fluxcd.io
+      resources:
+        - '*'
+    - verbs:
+        - '*'
+      apiGroups:
+        - terraform.appvia.io
+      resources:
+        - configurations

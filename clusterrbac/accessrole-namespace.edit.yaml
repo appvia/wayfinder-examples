@@ -1,0 +1,69 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessRole
+metadata:
+  name: namespace.edit
+spec:
+  accessRoleTemplate:
+    description: Full access to standard resources, excluding secrets read
+    clusterScope: false
+    rules:
+
+    # All standard v1 resources excluding secrets:
+    - verbs:
+      - '*'
+      apiGroups:
+      - ''
+      resources:
+      - 'bindings'
+      - 'configmaps'
+      - 'endpoints'
+      - 'events'
+      - 'limitranges'
+      - 'persistentvolumeclaims'
+      - 'pods'
+      - 'pods/log'
+      - 'podtemplates'
+      - 'replicationcontrollers'
+      - 'resourcequotas'
+      - 'serviceaccounts'
+      - 'services'
+
+    # Write-only access to secrets
+    - verbs:
+      - 'create'
+      - 'update'
+      - 'patch'
+      - 'delete'
+      apiGroups:
+      - ''
+      resources:
+      - 'secrets'
+
+    # Full access to these additional API groups:
+    - verbs:
+      - '*'
+      apiGroups:
+      # Additional standard kube groups:
+      - 'apps'
+      - 'batch'
+      - 'autoscaling'
+      - 'networking.k8s.io'
+      - 'authentication.k8s.io'
+      - 'authorization.k8s.io'
+      # Additional capabilities we typically deploy:
+      - 'cert-manager.io'
+      - 'helm.toolkit.fluxcd.io'
+      - 'source.toolkit.fluxcd.io'
+      - 'terraform.appvia.io'
+      resources:
+      - '*'
+
+    # Read-only access to RBAC, namespace edit shouldn't allow people to escalate themselves:
+    - verbs:
+      - 'get'
+      - 'list'
+      - 'watch'
+      apiGroups:
+      - 'rbac.authorization.k8s.io'
+      resources:
+      - '*'

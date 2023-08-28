@@ -1,0 +1,13 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessPolicy
+metadata:
+  name: support
+spec:
+  accessPolicyTemplate:
+    description: Temporary troubleshooting access to clusters including exec and logs for pods
+    accessRoleRefs: [ "namespace.troubleshooting" ]
+    wayfinderGroups: [ "admin" ]
+    groups: [ "troubleshooting" ]
+    subjectType: User
+    constraints:
+      ttl: 8h00m0s

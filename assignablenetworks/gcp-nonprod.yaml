@@ -1,0 +1,14 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: AssignableNetwork
+metadata:
+  name: gcp-nonprod
+spec:
+  provider: gcp
+  stage: nonprod
+  networks:
+  - range: 10.0.0.0/13
+    type: node
+  - range: 10.8.0.0/13
+    type: service
+  - range: 10.16.0.0/12
+    type: pod

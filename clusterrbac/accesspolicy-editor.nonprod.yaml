@@ -1,0 +1,17 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessPolicy
+metadata:
+  name: editor.nonprod
+spec:
+  accessPolicyTemplate:
+    description: Editor access to non-production clusters
+    accessRoleRefs: [ "cluster.view", "namespace.edit", "namespace.troubleshooting" ]
+    wayfinderGroups: [ "admin" ]
+    groups: [ "editor", "member" ]
+    subjectType: User
+    constraints:
+      ttl: 8h00m0s
+      clusters:
+        allowed:
+          matchLabels:
+            "appvia.io/stage": "nonprod"

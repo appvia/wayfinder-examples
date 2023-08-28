@@ -1,0 +1,23 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: ClusterNetworkPlan
+metadata:
+  name: eks-fixed
+spec:
+  summary: General purpose EKS cluster network using static IP addressing
+
+  template:
+    plan: eks-fixed
+    provider: aws
+    providerDetails:
+      type: aws
+      aws:
+        availabilityZones: 3
+        NatGateways: 3
+    ipv4:
+      cidrBlocks:
+      - type: node
+        cidr: 10.0.0.0/24
+    layout:
+      mode: auto
+      privateSubnets: 3
+      publicSubnets: 3

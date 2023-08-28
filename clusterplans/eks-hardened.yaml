@@ -1,0 +1,124 @@
+apiVersion: compute.appvia.io/v2beta1
+kind: ClusterPlan
+metadata:
+  name: eks-hardened
+spec:
+  summary: Hardened EKS cluster with a default "restricted" PSS Policy and no public ingress controller.
+
+  allocation:
+    type: all
+    workspaces: ["*"]
+
+  policies:
+  - editable: false
+    path: spec.providerDetails.eks.encryption.secretsEncryptionEnabled
+
+  template:
+    channel: default
+    enableAutoUpgrade: false
+    enablePrivateCluster: false
+    provider: EKS
+    providerDetails:
+      eks:
+        cloudWatchLogging:
+          api: true
+          audit: true
+          authenticator: true
+          controllerManager: true
+          scheduler: true
+        encryption:
+          secretsEncryptionEnabled: true
+      type: EKS
+    region: eu-west-2
+
+    security:
+      podSecurityStandard:
+        enabled: true
+        defaultProfile: restricted
+        allowed: ["restricted"]
+
+    networking:
+      networkPlan: eks-fixed
+      authorizedMasterNetworks:
+        - cidr: 0.0.0.0/0
+          name: default
+      authorizedNetworks:
+        - cidr: 0.0.0.0/0
+          name: default
+
+    nodePools:
+      - logicalName: compute
+        image: AL2_x86_64
+        diskSize: 30
+        autoscaling:
+          enabled: true
+          maxSize: 10
+          minSize: 2
+        machine: m5.large
+        size: 2
+
+    # See doc/development/quotalimits.md
+    quotaLimits:
+      default: small
+      templates:
+      - name: small
+        constraints:
+          hardQuota:
+            "requests.cpu": "512m"
+            "requests.memory": "1Gi"
+          limitRanges:
+          - type: Pod
+            max:
+              "cpu": "512m"
+              "memory": "1024Mi"
+              "ephemeral-storage": "4.5Gi"
+        resourceDefaults:
+        - type: Container
+          default:
+            "cpu": "512m"
+            "memory": "1024Mi"
+            "ephemeral-storage": "500Mi"
+          defaultRequest:
+            "cpu": "50m"
+            "memory": "200m"
+      - name: medium
+        constraints:
+          hardQuota:
+            "requests.cpu": "1"
+            "requests.memory": "2Gi"
+          limitRanges:
+          - type: Pod
+            max:
+              "cpu": "256m"
+              "memory": "512Mi"
+              "ephemeral-storage": "2.25Gi"
+        resourceDefaults:
+        - type: Container
+          default:
+            "cpu": "256m"
+            "memory": "512Mi"
+            "ephemeral-storage": "10Mi"
+          defaultRequest:
+            "cpu": "50m"
+            "memory": "200m"
+      - name: large
+        constraints:
+          hardQuota:
+            "requests.cpu": "4Gi"
+            "requests.memory": "8Gi"
+          limitRanges:
+          - type: Pod
+            max:
+              "cpu": "1"
+              "memory": "2Gi"
+              "ephemeral-storage": "9Gi"
+        resourceDefaults:
+        - type: Container
+          default:
+            "cpu": "1"
+            "memory": "2Gi"
+            "ephemeral-storage": "1Gi"
+          defaultRequest:
+            "cpu": "50m"
+            "memory": "200Mi"
+

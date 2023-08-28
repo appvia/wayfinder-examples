@@ -1,0 +1,24 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessRole
+metadata:
+  name: namespace.troubleshooting
+spec:
+  accessRoleTemplate:
+    description: Retrieve logs and exec into pods
+    clusterScope: false
+    rules:
+    - verbs:
+      - '*'
+      apiGroups:
+      - ''
+      resources:
+      - 'pods/exec'
+    - verbs:
+      - 'get'
+      - 'list'
+      - 'watch'
+      apiGroups:
+      - ''
+      resources:
+      - 'pods'
+      - 'pods/log'

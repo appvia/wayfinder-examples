@@ -1,0 +1,10 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: AssignableNetwork
+metadata:
+  name: aws-prod
+spec:
+  provider: aws
+  stage: prod
+  networks:
+  - range: 10.32.0.0/16
+    type: node

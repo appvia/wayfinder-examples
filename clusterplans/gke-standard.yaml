@@ -1,0 +1,121 @@
+apiVersion: compute.appvia.io/v2beta1
+kind: ClusterPlan
+metadata:
+  name: gke-standard
+spec:
+  summary: General purpose GKE cluster.
+
+  allocation:
+    type: all
+    workspaces: ["*"]
+
+  template:
+    channel: default
+    enableAutoUpgrade: false
+    enablePrivateCluster: false
+    provider: GKE
+    providerDetails:
+      gke:
+        enableHTTPLoadBalancer: false
+        enableHorizontalPodAutoscaler: true
+        enableShieldedNodes: false
+        enableStackDriverLogging: true
+        enableStackDriverMetrics: true
+        masterIPV4Cidr: 172.16.0.16/28
+      type: GKE
+    region: europe-west2
+
+    clusterLabels:
+      appvia.io/ingresspublic: "true"
+
+    security:
+      podSecurityStandard:
+        enabled: true
+        defaultProfile: baseline
+        allowed: ["restricted", "baseline", "privileged"]
+
+    networking:
+      networkPlan: gke-fixed
+      authorizedMasterNetworks:
+        - cidr: 0.0.0.0/0
+          name: default
+      authorizedNetworks:
+        - cidr: 0.0.0.0/0
+          name: default
+
+    nodePools:
+      - diskSize: 30
+        autoscaling:
+          enabled: true
+          maxSize: 10
+          minSize: 1
+        image: COS_CONTAINERD
+        machine: n2-standard-2
+        maxPodsPerNode: 110
+        logicalName: compute
+        size: 1
+
+    # See doc/development/quotalimits.md
+    quotaLimits:
+      default: small
+      templates:
+      - name: small
+        constraints:
+          hardQuota:
+            "requests.cpu": "1"
+            "requests.memory": "3.5Gi"
+          limitRanges:
+          - type: Pod
+            max:
+              "cpu": "256m"
+              "memory": "896Mi"
+              "ephemeral-storage": "1.875Gi"
+        resourceDefaults:
+        - type: Container
+          default:
+            "cpu": "256m"
+            "memory": "896Mi"
+            "ephemeral-storage": "10Mi"
+          defaultRequest:
+            "cpu": "50m"
+            "memory": "200Mi"
+      - name: medium
+        constraints:
+          hardQuota:
+            "requests.cpu": "2"
+            "requests.memory": "7Gi"
+          limitRanges:
+          - type: Pod
+            max:
+              "cpu": "512m"
+              "memory": "1792Mi"
+              "ephemeral-storage": "3.75Gi"
+        resourceDefaults:
+        - type: Container
+          default:
+            "cpu": "512m"
+            "memory": "1792Mi"
+            "ephemeral-storage": "500Mi"
+          defaultRequest:
+            "cpu": "50m"
+            "memory": "200Mi"
+      - name: large
+        constraints:
+          hardQuota:
+            "requests.cpu": "14Gi"
+            "requests.memory": "7Gi"
+          limitRanges:
+          - type: Pod
+            max:
+              "cpu": "1"
+              "memory": "3584Mi"
+              "ephemeral-storage": "7.5Gi"
+        resourceDefaults:
+        - type: Container
+          default:
+            "cpu": "1"
+            "memory": "1792Mi"
+            "ephemeral-storage": "1Gi"
+          defaultRequest:
+            "cpu": "50m"
+            "memory": "200Mi"

@@ -1,0 +1,10 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: AssignableNetwork
+metadata:
+  name: aws-nonprod
+spec:
+  provider: aws
+  stage: nonprod
+  networks:
+  - range: 10.0.0.0/16
+    type: node

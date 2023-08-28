@@ -1,0 +1,7 @@
+apiVersion: org.appvia.io/v2beta1
+kind: Stage
+metadata:
+  name: nonprod
+spec:
+  displayName: Non-production
+  description: Used for non-production environments, eg. development

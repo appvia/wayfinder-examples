@@ -1,0 +1,17 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalAccessPolicy
+metadata:
+  name: admin.prod
+spec:
+  accessPolicyTemplate:
+    description: Admin access to production clusters
+    accessRoleRefs: [ "cluster.admin", "namespace.admin" ]
+    wayfinderGroups: [ "admin" ]
+    groups: [ "owner" ]
+    subjectType: User
+    constraints:
+      ttl: 8h00m0s
+      clusters:
+        allowed:
+          matchLabels:
+            "appvia.io/stage": "prod"

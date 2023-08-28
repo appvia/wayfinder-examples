@@ -1,0 +1,26 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: ClusterNetworkPlan
+metadata:
+  name: gke-assignable
+spec:
+  summary: General purpose GKE cluster network using assignable IP ranges
+
+  allocation:
+    type: all
+    workspaces: ["*"]
+
+  assignableNetworks:
+  - gcp-nonprod
+  - gcp-prod
+
+  template:
+    plan: gke-assignable
+    provider: gcp
+    ipv4:
+      cidrBlocks:
+      - type: node
+        size: 20
+      - type: service
+        size: 20
+      - type: pod
+        size: 18
