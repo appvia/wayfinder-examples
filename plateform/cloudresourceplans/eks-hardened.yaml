@@ -1,0 +1,113 @@
+apiVersion: compute.appvia.io/v2beta1
+kind: ClusterPlan
+metadata:
+  name: eks-hardened
+spec:
+  allocation:
+    type: all
+    workspaces:
+    - '*'
+  summary: Hardened EKS cluster with a default "restricted" PSS Policy and no public
+    ingress controller.
+  template:
+    channel: default
+    enableAutoUpgrade: false
+    enablePrivateCluster: false
+    networking:
+      authorizedMasterNetworks:
+      - cidr: 0.0.0.0/0
+        name: default
+      authorizedNetworks:
+      - cidr: 0.0.0.0/0
+        name: default
+      networkPlan: eks-standard
+    nodePools:
+    - autoscaling:
+        enabled: true
+        maxSize: 10
+        minSize: 2
+      diskSize: 30
+      image: AL2_x86_64
+      logicalName: compute
+      machine: m5.large
+      size: 2
+    provider: EKS
+    providerDetails:
+      eks:
+        cloudWatchLogging:
+          api: true
+          audit: true
+          authenticator: true
+          controllerManager: true
+          scheduler: true
+      type: EKS
+    quotaLimits:
+      default: small
+      templates:
+      - constraints:
+          hardQuota:
+            requests.cpu: 512m
+            requests.memory: 1Gi
+          limitRanges:
+          - max:
+              cpu: 512m
+              ephemeral-storage: 4.5Gi
+              memory: 1024Mi
+            type: Pod
+        name: small
+        resourceDefaults:
+        - default:
+            cpu: 512m
+            ephemeral-storage: 500Mi
+            memory: 1024Mi
+          defaultRequest:
+            cpu: 50m
+            memory: 200m
+          type: Container
+      - constraints:
+          hardQuota:
+            requests.cpu: "1"
+            requests.memory: 2Gi
+          limitRanges:
+          - max:
+              cpu: 256m
+              ephemeral-storage: 2.25Gi
+              memory: 512Mi
+            type: Pod
+        name: medium
+        resourceDefaults:
+        - default:
+            cpu: 256m
+            ephemeral-storage: 10Mi
+            memory: 512Mi
+          defaultRequest:
+            cpu: 50m
+            memory: 200m
+          type: Container
+      - constraints:
+          hardQuota:
+            requests.cpu: 4Gi
+            requests.memory: 8Gi
+          limitRanges:
+          - max:
+              cpu: "1"
+              ephemeral-storage: 9Gi
+              memory: 2Gi
+            type: Pod
+        name: large
+        resourceDefaults:
+        - default:
+            cpu: "1"
+            ephemeral-storage: 1Gi
+            memory: 2Gi
+          defaultRequest:
+            cpu: 50m
+            memory: 200Mi
+          type: Container
+    region: eu-west-2
+    security:
+      podSecurityStandard:
+        allowed:
+        - restricted
+        defaultProfile: restricted
+        enabled: true

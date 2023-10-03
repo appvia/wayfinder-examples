@@ -1,0 +1,14 @@
+apiVersion: org.appvia.io/v2beta1
+kind: Identity
+metadata:
+  generateName: kashif.saadat-at-appvia.io
+  name: kashif.saadat-at-appvia.ioq6pmf
+spec:
+  accountType: SSO
+  email: kashif.saadat@appvia.io
+  provider: https://login.microsoftonline.com/7a770e35-b455-4df2-a276-b07408438d9a/v2.0
+  providerUID: 5i0MQYg6yl4UYQUI00PSQuY475AShD0wdrYpUk603oU
+  subject:
+    kind: User
+    name: kashif.saadat@appvia.io
+  username: kashif.saadat@appvia.io

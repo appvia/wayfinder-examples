@@ -1,0 +1,14 @@
+apiVersion: cloudaccess.appvia.io/v2beta1
+kind: CloudIdentity
+metadata:
+  name: azure-nonprod-dnszonemanager
+  namespace: ws-amir
+spec:
+  cloud: azure
+  credentialsUpdated: "2023-07-27T10:43:31Z"
+  implicitIdentity: false
+  implicitIdentityID: ""
+  name: Role identity for DNS Zone Manager with azure-nonprod
+  secretRef:
+    name: cred-azure-nonprod-dnszonemanager
+    namespace: ws-amir

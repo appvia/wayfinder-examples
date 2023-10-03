@@ -1,0 +1,21 @@
+apiVersion: cloudaccess.appvia.io/v2beta1
+kind: CloudAccessConfig
+metadata:
+  name: aws-appvia-wf-devtest
+  namespace: ws-admin
+spec:
+  cloud: aws
+  defaultRegion: eu-west-2
+  features:
+  - DNSZoneManagement
+  - CostsEstimates
+  identifier: "ACCOUNTID"
+  identityCred:
+    name: cloudidentity-aws
+    namespace: ws-admin
+  name: aws-appvia-wf-devtest
+  roles:
+  - assumeProviderRole: arn:aws:iam::ACCOUNTID:role/BLAH
+    role: DNSZoneManager
+  - assumeProviderRole: arn:aws:iam::ACCOUNTID:role/BLAH
+    role: CloudInfo

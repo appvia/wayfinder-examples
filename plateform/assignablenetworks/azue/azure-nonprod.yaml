@@ -1,0 +1,11 @@
+apiVersion: networking.appvia.io/v2beta1
+kind: AssignableNetwork
+metadata:
+  name: azure-nonprod
+spec:
+  networks:
+  - range: 10.0.0.0/14
+    type: node
+  - range: 10.8.0.0/13
+    type: service
+  provider: azure

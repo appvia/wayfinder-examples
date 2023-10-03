@@ -1,0 +1,30 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: ClusterPolicy
+metadata:
+  name: namespace.troubleshooting
+  namespace: ws-amir
+spec:
+  policy:
+    kuberbac:
+      rules:
+      - apiGroups:
+        - ""
+        resources:
+        - pods/exec
+        verbs:
+        - '*'
+      - apiGroups:
+        - ""
+        resources:
+        - pods
+        - pods/log
+        verbs:
+        - get
+        - list
+        - watch
+    type: KubeRBAC
+  target:
+    cluster: {}
+    namespace:
+      matchLabels:
+        appvia.io/workspace: amir

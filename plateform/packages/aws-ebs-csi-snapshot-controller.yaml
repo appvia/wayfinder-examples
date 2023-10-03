@@ -1,0 +1,26 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Package
+metadata:
+  annotations:
+    defaults.appvia.io/version: v2.3.0-rc1-1692365545
+  labels:
+    packages.appvia.io/name: aws-ebs-csi-snapshot-controller
+  name: aws-ebs-csi-snapshot-controller
+spec:
+  installNamespace: snapshot-controller
+  name: EBS CSI Snapshot Controller (AWS)
+  releaseName: snapshot-controller
+  selectors:
+    matchExpressions:
+    - key: appvia.io/provider
+      operator: In
+      values:
+      - EKS
+  source:
+    helm:
+      name: snapshot-controller
+      url: http://wayfinder-charts.wf-manager.svc.cluster.local
+      version: 1.7.2
+  summary: Provides snapshot support to EKS clusters using AWS EBS
+  values: {}
+  version: 1.7.2-1

@@ -1,0 +1,10 @@
+apiVersion: org.appvia.io/v2beta1
+kind: WayfinderGroup
+metadata:
+  annotations:
+    defaults.appvia.io/frozen: "true"
+    defaults.appvia.io/updateAvailable: v2.3.0-rc1-1692365545
+    defaults.appvia.io/version: develop-6d64230-1683192065
+  name: viewall
+spec:
+  description: Read-only viewer of all workspaces

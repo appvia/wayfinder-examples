@@ -1,0 +1,14 @@
+---
+apiVersion: org.appvia.io/v2beta1
+kind: WayfinderGroup
+metadata:
+  name: admin
+spec:
+  description: Administrators
+  members:
+    - kind: User
+      name: kashif.saadat@appvia.io
+    - kind: User
+      name: marcin.ciszak@appvia.io
+    - kind: User
+      name: rohith.jayawardene@appvia.io

@@ -1,0 +1,7 @@
+apiVersion: org.appvia.io/v2beta1
+kind: User
+metadata:
+  name: admin-at-appvia.io
+spec:
+  disabled: false
+  username: admin@appvia.io

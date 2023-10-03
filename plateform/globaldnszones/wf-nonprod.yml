@@ -1,0 +1,25 @@
+---
+apiVersion: dns.appvia.io/v2beta1
+kind: GlobalDNSZone
+metadata:
+  name: nonprod-wf-appvia-io
+spec:
+  allocation:
+    type: all
+  availableToApps:
+    stage: nonprod
+  availableToClusters:
+    mode: createChildZone
+    selectors:
+      matchExpressions:
+        - key: appvia.io/stage
+          operator: In
+          values:
+            - nonprod
+  cloudAccessConfigRef:
+    name: aws-admin
+    namespace: ws-admin
+  domain: nonprod.wf.appvia.io
+  manualChildZoneCreation: false
+  private: false
+  provider: aws

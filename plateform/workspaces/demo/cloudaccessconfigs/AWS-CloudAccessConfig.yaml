@@ -1,0 +1,26 @@
+---
+apiVersion: cloudaccess.appvia.io/v2beta1
+kind: CloudAccessConfig
+metadata:
+  name: aws-nonprod
+  namespace: ws-spprt
+spec:
+  cloud: aws
+  features:
+    - Provisioning
+  identifier: "982919317531" # Workload account ID.
+  identityCred:
+    name: cloudidentity-aws
+    namespace: ws-admin
+  name: aws-nonprod
+  roles:
+    - assumeProviderRole: arn:aws:iam::982919317531:role/wf-ClusterManager-spprt-5241db7bb541
+      cloudResourceName: wf-ClusterManager-spprt-5241db7bb541
+      role: ClusterManager
+    - assumeProviderRole: arn:aws:iam::982919317531:role/wf-DNSZoneManager-spprt-5241db7bb541
+      cloudResourceName: wf-DNSZoneManager-spprt-5241db7bb541
+      role: DNSZoneManager
+    - assumeProviderRole: arn:aws:iam::982919317531:role/wf-NetworkManager-spprt-5241db7bb541
+      cloudResourceName: wf-NetworkManager-spprt-5241db7bb541
+      role: NetworkManager
+  stage: nonprod

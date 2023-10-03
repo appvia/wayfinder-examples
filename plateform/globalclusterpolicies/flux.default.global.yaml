@@ -1,0 +1,40 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalClusterPolicy
+metadata:
+  annotations:
+    defaults.appvia.io/version: v2.3.0-rc1-1692365545
+  name: flux.default.global
+spec:
+  policy:
+    kyverno:
+      background: false
+      rules:
+      - exclude:
+          resources: {}
+          subjects:
+          - kind: ServiceAccount
+            name: wf-cluster-admin
+            namespace: kube-system
+        generate:
+          clone: {}
+          cloneList: {}
+        match:
+          resources:
+            kinds:
+            - HelmRelease
+            namespaceSelector:
+              matchExpressions:
+              - key: appvia.io/workspace
+                operator: Exists
+        mutate: {}
+        name: validate-helmrelease-serviceaccount
+        validate:
+          message: HelmReleases must specify a ServiceAccount
+          pattern:
+            spec:
+              serviceAccountName: ?*
+      validationFailureAction: enforce
+    type: Kyverno
+  target:
+    cluster: {}
+    namespace: {}

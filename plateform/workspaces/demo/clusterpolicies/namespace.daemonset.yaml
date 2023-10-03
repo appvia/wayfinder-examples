@@ -1,0 +1,21 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: ClusterPolicy
+metadata:
+  name: namespace.daemonset
+  namespace: ws-amir
+spec:
+  policy:
+    kuberbac:
+      rules:
+      - apiGroups:
+        - apps
+        resources:
+        - daemonsets
+        verbs:
+        - '*'
+    type: KubeRBAC
+  target:
+    cluster: {}
+    namespace:
+      matchLabels:
+        appvia.io/workspace: amir

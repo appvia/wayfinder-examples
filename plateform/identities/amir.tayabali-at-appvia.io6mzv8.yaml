@@ -1,0 +1,14 @@
+apiVersion: org.appvia.io/v2beta1
+kind: Identity
+metadata:
+  generateName: amir.tayabali-at-appvia.io
+  name: amir.tayabali-at-appvia.io6mzv8
+spec:
+  accountType: SSO
+  email: amir.tayabali@appvia.io
+  provider: https://appvia.eu.auth0.com/
+  providerUID: google-oauth2|109416557390058393972
+  subject:
+    kind: User
+    name: amir.tayabali@appvia.io
+  username: amir.tayabali@appvia.io

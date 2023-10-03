@@ -1,0 +1,30 @@
+apiVersion: dns.appvia.io/v2beta1
+kind: GlobalDNSZone
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"dns.appvia.io/v2beta1","kind":"GlobalDNSZone","metadata":{"annotations":{"appvia.io/lastUpdated":"2023-05-30T07:58:43Z","appvia.io/lastUpdatedBy":"kashif.saadat@appvia.io"},"creationTimestamp":"2023-05-11T13:18:00Z","finalizers":["dnszone.networking.appvia.io"],"generation":4,"labels":{"appvia.io/name":"gdns-wf-tf-demo-appvia-io","appvia.io/provider":"aws","name":"gdns-wf-tf-demo-appvia-io"},"name":"gdns-wf-tf-demo-appvia-io","resourceVersion":"9721463","uid":"794cbebb-adf9-48b8-98b7-fa567fc600de"},"spec":{"allocation":{"type":"all"},"availableToApps":{"stage":"nonprod"},"availableToClusters":{"mode":"createChildZone","selectors":{"matchExpressions":[{"key":"appvia.io/stage","operator":"In","values":["nonprod"]}]}},"cloudAccessConfigRef":{"name":"aws-admin","namespace":"ws-admin"},"cloudResourceName":"global-gdns-wf-tf-demo-appvia-io","domain":"gdns.wf-tf-demo.appvia.io","manualChildZoneCreation":true,"private":false,"provider":"aws"},"status":{"conditions":[{"lastTransitionTime":"2023-05-11T13:18:01Z","message":"Zone present in DNS provider","name":"DNS zone exists","observedGeneration":4,"reason":"Complete","status":"True","type":"ZoneExists"},{"lastTransitionTime":"2023-05-11T13:18:01Z","message":"Domain delegated correctly","name":"DNS zone delegated correctly","observedGeneration":4,"reason":"Complete","status":"True","type":"ZoneDelegated"},{"lastTransitionTime":"2023-05-11T13:18:01Z","message":"DNS zone ready for use","name":"DNS zone ready for use","observedGeneration":4,"reason":"Ready","status":"True","type":"Ready"}],"lastReconcile":{"generation":4,"time":"2023-05-30T07:58:33Z"},"lastSuccess":{"generation":4,"time":"2023-05-30T07:58:33Z"},"nameservers":["ns-1995.awsdns-57.co.uk.","ns-1511.awsdns-60.org.","ns-338.awsdns-42.com.","ns-699.awsdns-23.net."],"status":"Success","zoneID":"/hostedzone/Z05186113GO6YA38TTFL7"}}
+  labels:
+    name: gdns-wf-tf-demo-appvia-io
+  name: gdns-wf-tf-demo-appvia-io
+spec:
+  allocation:
+    type: all
+  availableToApps:
+    stage: nonprod
+  availableToClusters:
+    mode: createChildZone
+    selectors:
+      matchExpressions:
+      - key: appvia.io/stage
+        operator: In
+        values:
+        - nonprod
+  cloudAccessConfigRef:
+    name: aws-admin
+    namespace: ws-admin
+  cloudResourceName: global-gdns-wf-tf-demo-appvia-io
+  domain: gdns.wf-tf-demo.appvia.io
+  manualChildZoneCreation: true
+  private: false
+  provider: aws

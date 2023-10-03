@@ -1,0 +1,58 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalClusterPolicy
+metadata:
+  annotations:
+    defaults.appvia.io/version: v2.3.0-rc1-1692365545
+  name: pvc.storageclass.global
+spec:
+  policy:
+    kyverno:
+      background: false
+      rules:
+      - exclude:
+          resources: {}
+          subjects:
+          - kind: ServiceAccount
+            name: helm-controller
+            namespace: wf-manager
+        generate:
+          clone: {}
+          cloneList: {}
+        match:
+          resources:
+            kinds:
+            - PersistentVolumeClaim
+        mutate: {}
+        name: block-manual-pvc-storageclass
+        validate:
+          message: PersistentVolumeClaims may not use the manual storage class
+          pattern:
+            spec:
+              =(storageClassName): '!manual'
+      - exclude:
+          resources: {}
+          subjects:
+          - kind: ServiceAccount
+            name: helm-controller
+            namespace: wf-manager
+        generate:
+          clone: {}
+          cloneList: {}
+        match:
+          resources:
+            kinds:
+            - StatefulSet
+        mutate: {}
+        name: block-manual-statefulset-storageclass
+        validate:
+          message: StatefulSets may not use the manual storage class
+          pattern:
+            spec:
+              =(volumeClaimTemplates):
+              - spec:
+                  =(storageClassName): '!manual'
+      validationFailureAction: enforce
+    type: Kyverno
+  target:
+    cluster: {}
+    namespace: {}

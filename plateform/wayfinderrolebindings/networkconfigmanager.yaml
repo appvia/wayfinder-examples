@@ -1,0 +1,13 @@
+apiVersion: org.appvia.io/v2beta1
+kind: WayfinderRoleBinding
+metadata:
+  annotations:
+    defaults.appvia.io/version: v2.3.0-rc1-1692365545
+  name: networkconfigmanager
+spec:
+  roleRef:
+    kind: WayfinderRole
+    name: networkconfigmanager
+  subjects:
+  - kind: WayfinderGroup
+    name: admin

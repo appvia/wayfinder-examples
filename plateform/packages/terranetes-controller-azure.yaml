@@ -1,0 +1,97 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Package
+metadata:
+  annotations:
+    defaults.appvia.io/version: v2.3.0-rc1-1692365545
+  labels:
+    channels.appvia.io/default: "true"
+    packages.appvia.io/name: terranetes-controller-azure
+  name: terranetes-controller-azure
+spec:
+  installNamespace: terraform-system
+  name: Terranetes controller (Azure)
+  releaseName: terranetes-controller-azure
+  selectors:
+    matchExpressions:
+    - key: appvia.io/channel
+      operator: In
+      values:
+      - default
+    - key: appvia.io/provider
+      operator: In
+      values:
+      - AKS
+  source:
+    helm:
+      name: terranetes-controller
+      url: http://wayfinder-charts.wf-manager.svc.cluster.local
+      version: v0.6.8
+  summary: Enables the capability to provision cloud resources on Azure
+  values:
+    fullnameOverride: terranetes-controller
+    policies:
+    - annotations: {}
+      constraint:
+        modules:
+          allowed:
+          - https://github.com/.*
+      labels: {}
+      name: permitted-modules
+    - annotations: {}
+      constraint:
+        checkov:
+          skipChecks:
+          - CKV_AWS_18
+          - CKV_AWS_19
+          - CKV_AWS_21
+          - CKV_AWS_40
+          - CKV_AWS_53
+          - CKV_AWS_54
+          - CKV_AWS_55
+          - CKV_AWS_56
+          - CKV_AWS_144
+          - CKV_AWS_145
+          - CKV_AWS_273
+          - CKV2_AWS_6
+          - CKV_AZURE_33
+          - CKV_AZURE_35
+          - CKV_AZURE_36
+          - CKV_AZURE_59
+          - CKV_AZURE_206
+          - CKV2_AZURE_1
+          - CKV2_AZURE_18
+          - CKV2_AZURE_21
+          - CKV2_AZURE_33
+      labels: {}
+      name: checkov-exclusions
+    providers:
+    - configuration:
+        subscription_id: injected
+        tenant_id: injected
+        use_msi: true
+      name: default
+      provider: azurerm
+      serviceAccount: terranetes-executor
+      source: injected
+    rbac:
+      executor:
+        annotations: {}
+        create: true
+  valuesFrom:
+  - cloudAccessConfig:
+      key: spec.orgIdentifier
+      path: providers.0.configuration.tenant_id
+  - cloudAccessConfig:
+      key: spec.identifier
+      path: providers.0.configuration.subscription_id
+  version: v0.6.8-0
+  workloadIdentity:
+    clusterServiceAccount:
+      name: terranetes-executor
+      namespace: terraform-system
+    providerDetails:
+      azure:
+        helmPodLabelsPaths:
+        - providers.0.labels
+        helmPodSelector: terranetes-executor
+    role: TerraformExecutor

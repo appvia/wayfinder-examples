@@ -1,0 +1,23 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: ClusterPolicy
+metadata:
+  name: cluster.admin
+  namespace: ws-amir
+spec:
+  policy:
+    kuberbac:
+      clusterScoped: true
+      rules:
+      - apiGroups:
+        - '*'
+        - '*/*'
+        resources:
+        - '*'
+        verbs:
+        - '*'
+    type: KubeRBAC
+  target:
+    cluster: {}
+    namespace:
+      matchLabels:
+        appvia.io/workspace: amir

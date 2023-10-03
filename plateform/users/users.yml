@@ -1,0 +1,24 @@
+---
+apiVersion: org.appvia.io/v2beta1
+kind: User
+metadata:
+  name: kashif.saadat-at-appvia.io
+spec:
+  disabled: false
+  username: kashif.saadat@appvia.io
+---
+apiVersion: org.appvia.io/v2beta1
+kind: User
+metadata:
+  name: marcin.ciszak-at-appvia.io
+spec:
+  disabled: false
+  username: marcin.ciszak@appvia.io
+---
+apiVersion: org.appvia.io/v2beta1
+kind: User
+metadata:
+  name: rohith.jayawardene-at-appvia.io
+spec:
+  disabled: false
+  username: rohith.jayawardene@appvia.io

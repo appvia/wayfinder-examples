@@ -1,0 +1,59 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Package
+metadata:
+  labels:
+    packages.appvia.io/name: nvidia-device-plugin
+  name: nvidia-device-plugin
+spec:
+  installNamespace: kube-system
+  name: Kubernetes NVIDIA Device Plugin
+  releaseName: nvidia-device-plugin
+  selectors:
+    matchExpressions:
+    - key: appvia.io/managementcluster
+      operator: DoesNotExist
+    - key: nvidia.com/gpu
+      operator: Exists
+    - key: appvia.io/provider
+      operator: In
+      values:
+      - EKS
+  source:
+    helm:
+      name: nvidia-device-plugin
+      url: https://nvidia.github.io/k8s-device-plugin
+      version: v0.14.0
+  summary: NVIDIA Device Plugin used to access the GPU on EKS Clusters
+  values:
+    config:
+      default: tesla-t4
+      map:
+        a100-40gb: |-
+          version: v1
+          flags:
+            migStrategy: mixed
+          sharing:
+            timeSlicing:
+              resources:
+              - name: nvidia.com/gpu
+                replicas: 8
+              - name: nvidia.com/mig-1g.5gb
+                replicas: 2
+              - name: nvidia.com/mig-2g.10gb
+                replicas: 2
+              - name: nvidia.com/mig-3g.20gb
+                replicas: 3
+              - name: nvidia.com/mig-7g.40gb
+                replicas: 7
+        tesla-t4: |-
+          version: v1
+          flags:
+            migStrategy: none
+          sharing:
+            timeSlicing:
+              resources:
+              - name: nvidia.com/gpu
+                replicas: 4
+    nodeSelector:
+      nvidia.com/gpu: "true"
+  version: v0.14.0-1

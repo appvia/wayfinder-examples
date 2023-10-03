@@ -1,0 +1,27 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalClusterPolicy
+metadata:
+  name: bp-require-ingress-tls
+spec:
+  policy:
+    type: Kyverno
+    kyverno:
+      background: false
+      validationFailureAction: enforce
+      rules:
+      - name: require-ingress-tls
+        match:
+          any:
+          - resources:
+              kinds:
+              - Ingress
+              namespaceSelector:
+                matchExpressions:
+                - key: appvia.io/workspace
+                  operator: Exists
+        validate:
+          message: "Only HTTPS Ingress resources are allowed, ensure you have set 'spec.tls'."
+          pattern:
+            spec:
+              tls:
+              - hosts: ?*

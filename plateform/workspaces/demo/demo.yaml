@@ -1,0 +1,13 @@
+apiVersion: org.appvia.io/v2beta1
+kind: Workspace
+metadata:
+  name: amir
+spec:
+  description: 'This is for demo and testing '
+  key: amir
+  owners:
+  - kind: User
+    name: amir.tayabali@appvia.io
+  resourceNamespace: ws-amir
+  summary: amir
+  type: standard

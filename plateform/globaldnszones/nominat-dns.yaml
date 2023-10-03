@@ -1,0 +1,36 @@
+apiVersion: dns.appvia.io/v2beta1
+kind: GlobalDNSZoneList
+metadata:
+  resourceVersion: "7994182"
+items:
+- apiVersion: dns.appvia.io/v2beta1
+  kind: GlobalDNSZone
+  metadata:
+    finalizers:
+    - dnszone.networking.appvia.io
+    labels:
+      appvia.io/name: bold-kitten-uk
+      appvia.io/provider: aws
+      appvia.io/wayfinderid: 7b5f18d0625a
+      name: bold-kitten-uk
+    name: bold-kitten-uk
+  spec:
+    allocation:
+      type: all
+    availableToClusters:
+      mode: createChildZone
+      selectors:
+        matchExpressions:
+        - key: appvia.io/stage
+          operator: In
+          values:
+          - nonprod
+          - prod
+    cloudAccessConfigRef:
+      name: aws-admin
+      namespace: ws-admin
+    cloudResourceName: global-bold-kitten-uk
+    domain: bold-kitten.uk
+    manualChildZoneCreation: true
+    private: false
+    provider: aws

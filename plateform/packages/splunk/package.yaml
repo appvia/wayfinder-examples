@@ -1,0 +1,32 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Package
+metadata:
+  name: splunk-otel-collector
+spec:
+  installNamespace: splunk
+  name: splunk-otel-collector
+  releaseName: splunk-otel-collector
+  selectors:
+    matchExpressions:
+    - key: appvia.io/managementcluster
+      operator: DoesNotExist
+  source:
+    helm:
+      name: splunk-otel-collector
+      url: https://signalfx.github.io/splunk-otel-collector-chart
+      version: v0.80.0
+  summary: Splunk agent
+  values:
+    splunkObservability:
+      realm: "eu0"
+      logsEnabled: true
+  valuesFrom:
+  - secret:
+      name: splunk
+      key: token
+      path: splunkObservability.accessToken
+      namespace: ws-admin
+  - cluster:
+      key: spec.cloudResourceName
+      path: clusterName
+  version: v0.80.0-2

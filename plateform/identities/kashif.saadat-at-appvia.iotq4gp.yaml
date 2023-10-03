@@ -1,0 +1,14 @@
+apiVersion: org.appvia.io/v2beta1
+kind: Identity
+metadata:
+  generateName: kashif.saadat-at-appvia.io
+  name: kashif.saadat-at-appvia.iotq4gp
+spec:
+  accountType: SSO
+  email: kashif.saadat@appvia.io
+  provider: https://appvia.eu.auth0.com/
+  providerUID: google-oauth2|101341439142140992676
+  subject:
+    kind: User
+    name: kashif.saadat@appvia.io
+  username: kashif.saadat@appvia.io

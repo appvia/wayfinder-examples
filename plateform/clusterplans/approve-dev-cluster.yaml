@@ -1,0 +1,85 @@
+apiVersion: compute.appvia.io/v2beta1
+kind: ClusterPlan
+metadata:
+  name: nominet-approve-dev-cluster
+spec:
+  allocation:
+    type: all
+  policies:
+  - editable: false
+    path: spec.providerDetails.eks.cloudWatchLogging.scheduler
+  - editable: false
+    path: spec.providerDetails.eks.cloudWatchLogging.controllerManager
+  - editable: false
+    path: spec.providerDetails.eks.cloudWatchLogging.authenticator
+  - editable: false
+    path: spec.providerDetails.eks.cloudWatchLogging.audit
+  - editable: false
+    path: spec.providerDetails.eks.cloudWatchLogging.api
+  - editable: false
+    path: spec.nodePools.0.name
+  - editable: true
+    path: spec.nodePools.0.description
+  - editable: false
+    path: spec.nodePools.0.machine
+  - editable: false
+    path: spec.nodePools.0.image
+  - editable: true
+    path: spec.nodePools.0.spot.enabled
+  - editable: false
+    path: spec.nodePools.0.diskSize
+  - editable: false
+    path: spec.enableAutoUpgrade
+  - editable: true
+    path: spec.networking.authorizedMasterNetworks
+  - editable: false
+    path: spec.networking.authorizedNetworks
+  - editable: false
+    path: spec.security.podSecurityStandard
+  summary: Nominet approve dev cluster
+  template:
+    channel: default
+    clusterLabels:
+      appvia.io/ingresspublic: "true"
+    networking:
+      authorizedMasterNetworks:
+      - cidr: 0.0.0.0/0
+        name: default
+      authorizedNetworks:
+      - cidr: 0.0.0.0/0
+        name: default
+      networkPlan: eks-standard
+    nodePools:
+    - autoscaling:
+        enabled: true
+        maxSize: 10
+        minSize: 1
+      diskSize: 30
+      image: AL2_x86_64
+      logicalName: kc81w
+      machine: t3.large
+      size: 2
+      spot:
+        eks:
+          additionalInstanceTypes:
+          - m5.large
+          - m5.xlarge
+        enabled: true
+    provider: EKS
+    providerDetails:
+      eks:
+        cloudWatchLogging:
+          api: true
+          audit: true
+          authenticator: true
+          controllerManager: true
+          scheduler: true
+      type: EKS
+    region: eu-west-2
+    security:
+      podSecurityStandard:
+        allowed:
+        - baseline
+        - restricted
+        defaultProfile: baseline
+        enabled: true

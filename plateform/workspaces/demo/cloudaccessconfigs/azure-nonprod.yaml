@@ -1,0 +1,34 @@
+apiVersion: cloudaccess.appvia.io/v2beta1
+kind: CloudAccessConfig
+metadata:
+  name: azure-nonprod
+  namespace: ws-amir
+spec:
+  cloud: azure
+  defaultRegion: uksouth
+  features:
+  - Provisioning
+  identifier: c9757c60-ea81-44e7-a7a3-022874e014ba
+  identityCred:
+    name: azure-nonprod-none
+    namespace: ws-amir
+  name: azure-nonprod
+  orgIdentifier: 7a770e35-b455-4df2-a276-b07408438d9a
+  roles:
+  - assumeProviderRole: azure-nonprod-clustermanager
+    cloudResourceName: wf-amir-azure-nonprod-clustermanager-5241db7bb541
+    deployedResourceHash: cf63dbf734c8317a993f808ddfccb324
+    role: ClusterManager
+  - assumeProviderRole: azure-nonprod-networkmanager
+    cloudResourceName: wf-amir-azure-nonprod-networkmanager-5241db7bb541
+    deployedResourceHash: 99138d422bc32048b8b4e80b2e163930
+    role: NetworkManager
+  - assumeProviderRole: azure-nonprod-dnszonemanager
+    cloudResourceName: wf-amir-azure-nonprod-dnszonemanager-5241db7bb541
+    deployedResourceHash: 5eca1a6746b1820776391fdc274bbfd0
+    role: DNSZoneManager
+  - assumeProviderRole: azure-nonprod-none
+    cloudResourceName: wf-amir-azure-nonprod-none-5241db7bb541
+    deployedResourceHash: d174509f13e73434f852b73d0584bdb5
+    role: None
+  stage: nonprod

@@ -1,0 +1,25 @@
+---
+apiVersion: dns.appvia.io/v2beta1
+kind: GlobalDNSZone
+metadata:
+  name: prod-wf-appvia-io
+spec:
+  allocation:
+    type: all
+  availableToApps:
+    stage: prod
+  availableToClusters:
+    mode: createChildZone
+    selectors:
+      matchExpressions:
+        - key: appvia.io/stage
+          operator: In
+          values:
+            - prod
+  cloudAccessConfigRef:
+    name: aws-admin
+    namespace: ws-admin
+  domain: prod.wf.appvia.io
+  manualChildZoneCreation: false
+  private: false
+  provider: aws

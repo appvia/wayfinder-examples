@@ -1,0 +1,234 @@
+apiVersion: cloudresources.appvia.io/v2beta1
+kind: CloudResourcePlan
+metadata:
+  name: azure-azurerm-postgresql
+spec:
+  allocation:
+    type: all
+  cloud: azure
+  description: Azure Database for PostgreSQL Module
+  enableTemplateAutoUpgrade: false
+  enableWatch: false
+  inputDefinitions:
+  - default: true
+    description: Enable Geo-redundant or not for server backup. Valid values for this
+      property are Enabled or Disabled, not supported for the basic tier.
+    name: geo_redundant_backup_enabled
+    type: bool
+  - default: GP_Gen5_4
+    description: Specifies the SKU Name for this PostgreSQL Server. The name of the
+      SKU, follows the tier + family + cores pattern (e.g. B_Gen4_1, GP_Gen5_8).
+    name: sku_name
+    type: string
+  - default: 102400
+    description: Max storage allowed for a server. Possible values are between 5120
+      MB(5GB) and 1048576 MB(1TB) for the Basic SKU and between 5120 MB(5GB) and 4194304
+      MB(4TB) for General Purpose/Memory Optimized SKUs.
+    name: storage_mb
+    type: number
+  - default: postgresql-vnet-rule-
+    description: Specifies prefix for vnet rule names.
+    name: vnet_rule_name_prefix
+    type: string
+  - default: null
+    description: The Password associated with the administrator_login for the PostgreSQL
+      Server.
+    name: administrator_password
+    required: true
+    sensitive: true
+    type: string
+  - default: 7
+    description: Backup retention days for the server, supported values are between
+      7 and 35 days.
+    name: backup_retention_days
+    type: number
+  - default: true
+    description: Whether or not infrastructure is encrypted for this server
+    name: infrastructure_encryption_enabled
+    type: bool
+  - default: []
+    description: 'The list of maps, describing vnet rules. Valud map items: name,
+      subnet_id.'
+    name: vnet_rules
+    type: list(map(string))
+  - default: {}
+    description: A map with PostgreSQL configurations to enable.
+    name: postgresql_configurations
+    type: map(string)
+  - default: "9.5"
+    description: Specifies the version of PostgreSQL to use. Valid values are `9.5`,
+      `9.6`, `10.0`, `10.2` and `11`. Changing this forces a new resource to be created.
+    name: server_version
+    type: string
+  - default: null
+    description: The Administrator Login for the PostgreSQL Server. Changing this
+      forces a new resource to be created.
+    name: administrator_login
+    required: true
+    type: string
+  - default: null
+    description: The name of the resource group in which to create the PostgreSQL
+      Server. Changing this forces a new resource to be created.
+    name: resource_group_name
+    required: true
+    type: string
+  - default: null
+    description: Specifies the name of the PostgreSQL Server. Changing this forces
+      a new resource to be created.
+    name: server_name
+    required: true
+    type: string
+  - default: []
+    description: The list of names of the PostgreSQL Database, which needs to be a
+      valid PostgreSQL identifier. Changing this forces a new resource to be created.
+    name: db_names
+    type: list(string)
+  - default: firewall-
+    description: Specifies prefix for firewall rule names.
+    name: firewall_rule_prefix
+    type: string
+  - default: []
+    description: 'The list of maps, describing firewall rules. Valid map items: name,
+      start_ip, end_ip.'
+    name: firewall_rules
+    type: list(map(string))
+  - default: true
+    description: Specifies if SSL should be enforced on connections. Possible values
+      are Enabled and Disabled.
+    name: ssl_enforcement_enabled
+    type: bool
+  - default: null
+    description: Threat detection policy configuration, known in the API as Server
+      Security Alerts Policy
+    name: threat_detection_policy
+    sensitive: true
+    type: |-
+      object(
+          {
+            enabled                    = optional(bool)
+            disabled_alerts            = optional(set(string))
+            email_account_admins       = optional(bool)
+            email_addresses            = optional(set(string))
+            retention_days             = optional(number)
+            storage_account_access_key = optional(string)
+            storage_endpoint           = optional(string)
+          }
+        )
+  - default: {}
+    description: A map of tags to set on every taggable resources. Empty by default.
+    name: tags
+    type: map(string)
+  - default: null
+    description: Specifies the supported Azure location where the resource exists.
+      Changing this forces a new resource to be created.
+    name: location
+    required: true
+    type: string
+  - default: true
+    description: (Optional) Enable or disable incremental automatic growth of database
+      space. Storage auto-grow prevents your server from running out of storage and
+      becoming read-only. If storage auto grow is enabled, the storage automatically
+      grows without impacting the workload. The default value if not explicitly specified
+      is `true`.
+    name: auto_grow_enabled
+    type: bool
+  - default: UTF8
+    description: Specifies the Charset for the PostgreSQL Database, which needs to
+      be a valid PostgreSQL Charset. Changing this forces a new resource to be created.
+    name: db_charset
+    type: string
+  - default: English_United States.1252
+    description: Specifies the Collation for the PostgreSQL Database, which needs
+      to be a valid PostgreSQL Collation. Note that Microsoft uses different notation
+      - en-US instead of en_US. Changing this forces a new resource to be created.
+    name: db_collation
+    type: string
+  - default: null
+    description: Whether or not public network access is allowed for this server.
+      Possible values are Enabled and Disabled.
+    name: public_network_access_enabled
+    type: bool
+  - default: TLS1_2
+    description: (Optional) The minimum TLS version to support on the sever. Possible
+      values are `TLSEnforcementDisabled`, `TLS1_0`, `TLS1_1`, and `TLS1_2`. Defaults
+      to `TLS1_2`. `ssl_minimal_tls_version_enforced` must be set to `TLSEnforcementDisabled`
+      when `ssl_enforcement_enabled` is set to `false`.
+    name: ssl_minimal_tls_version_enforced
+    type: string
+  outputs:
+  - description: The list of all database resource ids
+    name: database_ids
+  - description: The list of all firewall rule resource ids
+    name: firewall_rule_ids
+  - description: The fully qualified domain name (FQDN) of the PostgreSQL server
+    name: server_fqdn
+  - description: The resource id of the PostgreSQL server
+    name: server_id
+  - description: The name of the PostgreSQL server
+    name: server_name
+  - description: The list of all vnet rule resource ids
+    name: vnet_rule_ids
+  - description: The Administrator login for the PostgreSQL Server
+    name: administrator_login
+  - description: The Password associated with the `administrator_login` for the PostgreSQL
+      Server
+    name: administrator_password
+    sensitive: true
+  policies:
+  - editable: false
+    path: geo_redundant_backup_enabled
+  - editable: false
+    path: sku_name
+  - editable: false
+    path: storage_mb
+  - editable: false
+    path: vnet_rule_name_prefix
+  - editable: true
+    path: administrator_password
+  - editable: false
+    path: backup_retention_days
+  - editable: false
+    path: infrastructure_encryption_enabled
+  - editable: false
+    path: vnet_rules
+  - editable: false
+    path: postgresql_configurations
+  - editable: false
+    path: server_version
+  - editable: true
+    path: administrator_login
+  - editable: false
+    path: resource_group_name
+  - editable: false
+    path: server_name
+  - editable: false
+    path: db_names
+  - editable: false
+    path: firewall_rule_prefix
+  - editable: false
+    path: firewall_rules
+  - editable: false
+    path: ssl_enforcement_enabled
+  - editable: false
+    path: threat_detection_policy
+  - editable: false
+    path: tags
+  - editable: false
+    path: location
+  - editable: false
+    path: auto_grow_enabled
+  - editable: false
+    path: db_charset
+  - editable: false
+    path: db_collation
+  - editable: false
+    path: public_network_access_enabled
+  - editable: false
+    path: ssl_minimal_tls_version_enforced
+  template:
+    revision: 3.0.0
+    source: https://github.com/Azure/terraform-azurerm-postgresql
+    variables:
+      location: UK South
+      resource_group_name: terranetes
+      server_name: examples-server

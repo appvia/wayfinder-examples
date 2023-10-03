@@ -1,0 +1,23 @@
+apiVersion: org.appvia.io/v2beta1
+kind: WayfinderGroup
+metadata:
+  annotations:
+    defaults.appvia.io/frozen: "true"
+    defaults.appvia.io/updateAvailable: v2.3.0-rc1-1692365545
+    defaults.appvia.io/version: develop-6d64230-1683192065
+  name: admin
+spec:
+  description: Administrators
+  members:
+  - kind: User
+    name: localadmin
+  - kind: User
+    name: marcin.ciszak@appvia.io
+  - kind: User
+    name: kashif.saadat@appvia.io
+  - kind: User
+    name: rohith.jayawardene@appvia.io
+  - kind: User
+    name: alastair.hinde@appvia.io
+  - kind: User
+    name: amir.tayabali@appvia.io

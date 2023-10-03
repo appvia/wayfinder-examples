@@ -12,9 +12,9 @@ $ cd wayfinder-examples
 
 # Apply files or folders of your choosing to your Wayfinder instance, for example, add all of the
 # example network and cluster plans:
-$ wf apply -f ./assignablenetworks
-$ wf apply -f ./clusternetworkplans
-$ wf apply -f ./clusterplans
+$ wf apply -f ./plateform/assignablenetworks
+$ wf apply -f ./plateform/clusternetworkplans
+$ wf apply -f ./plateform/clusterplans
 ```
 
 You can also copy these definitions into your repository as a starting point for your own

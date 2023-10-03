@@ -1,0 +1,52 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: ClusterPolicy
+metadata:
+  name: namespace.view
+  namespace: ws-amir
+spec:
+  policy:
+    kuberbac:
+      rules:
+      - apiGroups:
+        - ""
+        resources:
+        - bindings
+        - configmaps
+        - endpoints
+        - events
+        - limitranges
+        - persistentvolumeclaims
+        - pods
+        - pods/log
+        - podtemplates
+        - replicationcontrollers
+        - resourcequotas
+        - serviceaccounts
+        - services
+        verbs:
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - apps
+        - batch
+        - autoscaling
+        - networking.k8s.io
+        - authentication.k8s.io
+        - authorization.k8s.io
+        - rbac.authorization.k8s.io
+        - cert-manager.io
+        - helm.toolkit.fluxcd.io
+        - source.toolkit.fluxcd.io
+        resources:
+        - '*'
+        verbs:
+        - get
+        - list
+        - watch
+    type: KubeRBAC
+  target:
+    cluster: {}
+    namespace:
+      matchLabels:
+        appvia.io/workspace: amir

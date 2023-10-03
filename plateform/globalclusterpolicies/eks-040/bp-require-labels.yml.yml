@@ -1,0 +1,36 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalClusterPolicy
+metadata:
+  name: bp-require-labels
+spec:
+  policy:
+    type: Kyverno
+    kyverno:
+      background: false
+      validationFailureAction: enforce
+      rules:
+      - name: bp-require-labels
+        match:
+          any:
+          - resources:
+              kinds:
+              - Deployment
+              - Ingress
+              - NetworkPolicy
+              - Pod
+              - Service
+              - StatefulSet
+              namespaceSelector:
+                matchExpressions:
+                - key: appvia.io/workspace
+                  operator: Exists
+        validate:
+          message: >-
+            Default application labels are missing.
+            You must ensure the following labels are set:
+            app.kubernetes.io/name, app.kubernetes.io/component
+          pattern:
+            metadata:
+              labels:
+                app.kubernetes.io/name: "?*"
+                app.kubernetes.io/component: "?*"

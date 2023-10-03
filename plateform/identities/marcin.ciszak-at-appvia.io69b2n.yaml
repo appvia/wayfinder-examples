@@ -1,0 +1,14 @@
+apiVersion: org.appvia.io/v2beta1
+kind: Identity
+metadata:
+  generateName: marcin.ciszak-at-appvia.io
+  name: marcin.ciszak-at-appvia.io69b2n
+spec:
+  accountType: SSO
+  email: marcin.ciszak@appvia.io
+  provider: https://appvia.eu.auth0.com/
+  providerUID: google-oauth2|112349209189853437710
+  subject:
+    kind: User
+    name: marcin.ciszak@appvia.io
+  username: marcin.ciszak@appvia.io

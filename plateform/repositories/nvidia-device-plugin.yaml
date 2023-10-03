@@ -1,0 +1,16 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Repository
+metadata:
+  name: nvidia-device-plugin
+spec:
+  interval: 60m
+  selectors:
+    matchExpressions:
+    - key: nvidia.com/gpu
+      operator: Exists
+    - key: appvia.io/provider
+      operator: In
+      values:
+      - EKS
+  timeout: 60s
+  url: https://nvidia.github.io/k8s-device-plugin

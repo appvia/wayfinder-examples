@@ -1,0 +1,44 @@
+apiVersion: policydelivery.appvia.io/v1alpha1
+kind: GlobalClusterPolicy
+metadata:
+  annotations:
+    defaults.appvia.io/version: v2.3.0-rc1-1692365545
+  name: limitranges.default.global
+spec:
+  policy:
+    kyverno:
+      background: false
+      rules:
+      - exclude:
+          resources: {}
+          subjects:
+          - kind: ServiceAccount
+            name: wf-cluster-admin
+            namespace: kube-system
+        generate:
+          clone: {}
+          cloneList: {}
+        match:
+          resources:
+            kinds:
+            - LimitRange
+            - ResourceQuota
+        mutate: {}
+        name: block-limitranges-changes
+        validate:
+          deny:
+            conditions:
+              any:
+              - key: '{{request.operation || ''BACKGROUND''}}'
+                operator: AnyIn
+                value:
+                - DELETE
+                - UPDATE
+                - CREATE
+                - PATCH
+          message: LimitRanges and ResourceQuotas are managed by cluster admins
+      validationFailureAction: enforce
+    type: Kyverno
+  target:
+    cluster: {}
+    namespace: {}

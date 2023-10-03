@@ -1,0 +1,177 @@
+apiVersion: compute.appvia.io/v2beta1
+kind: ClusterPlan
+metadata:
+  name: aks-hpc
+spec:
+  allocation:
+    type: workspaces
+    workspaces:
+    - juphb
+  policies:
+  - editable: false
+    path: spec.region
+  - editable: false
+    path: spec.version
+  - editable: false
+    path: spec.enableAutoUpgrade
+  - editable: false
+    path: spec.provider
+  - editable: false
+    path: spec.providerDetails
+  - editable: false
+    path: spec.security
+  - editable: false
+    path: spec.security.podSecurityStandard
+  - editable: false
+    path: spec.clusterProviderDetails.linuxProfile.adminUsername
+  - editable: false
+    path: spec.clusterProviderDetails.linuxProfile.sshPublicKeys
+  - editable: false
+    path: spec.clusterProviderDetails.windowsProfile.adminUsername
+  - editable: false
+    path: spec.clusterProviderDetails.windowsProfile.adminPassword
+  - editable: false
+    path: spec.clusterProviderDetails.skuTier
+  - editable: false
+    path: spec.networking.authorizedMasterNetworks
+  - editable: false
+    path: spec.networking.authorizedNetworks
+  - editable: false
+    path: spec.networking.networkProvider
+  - editable: false
+    path: spec.enablePrivateCluster
+  - editable: false
+    path: spec.allocation.workspaces
+  - editable: true
+    path: spec.nodePools
+  - editable: true
+    path: spec.expires
+  - editable: false
+    path: spec.providerDetails.aks.linuxProfile.adminUsername
+  summary: HPC AKS cluster
+  template:
+    clusterLabels:
+      appvia.io/ingresspublic: "true"
+    enableAutoUpgrade: false
+    enablePrivateCluster: false
+    expires: 168h0m0s
+    networking:
+      authorizedMasterNetworks:
+      - cidr: 0.0.0.0/0
+        name: default
+      authorizedNetworks:
+      - cidr: 0.0.0.0/0
+        name: default
+      networkPlan: aks-standard
+    nodePools:
+    - autoscaling:
+        enabled: true
+        maxSize: 4
+        minSize: 1
+      diskSize: 30
+      image: Linux
+      logicalName: system
+      machine: Standard_B2ms
+      maxPodsPerNode: 110
+      providerDetails:
+        aks:
+          mode: system
+        type: AKS
+      size: 1
+    - autoscaling:
+        enabled: true
+        maxSize: 10
+        minSize: 1
+      diskSize: 30
+      image: Linux
+      logicalName: compute
+      machine: Standard_D2s_v5
+      maxPodsPerNode: 110
+      providerDetails:
+        aks:
+          mode: user
+        type: AKS
+      size: 1
+      spot:
+        aks: {}
+        enabled: true
+    provider: AKS
+    providerDetails:
+      aks:
+        linuxProfile: {}
+        skuTier: Free
+        windowsProfile: {}
+      type: AKS
+    quotaLimits:
+      default: small
+      templates:
+      - constraints:
+          hardQuota:
+            requests.cpu: "1"
+            requests.memory: 3.5Gi
+          limitRanges:
+          - max:
+              cpu: 256m
+              ephemeral-storage: 2.175Gi
+              memory: 896Mi
+            type: Pod
+        name: small
+        resourceDefaults:
+        - default:
+            cpu: 256m
+            ephemeral-storage: 10Mi
+            memory: 896Mi
+          defaultRequest:
+            cpu: 50m
+            memory: 200Mi
+          type: Container
+      - constraints:
+          hardQuota:
+            requests.cpu: "2"
+            requests.memory: 7Gi
+          limitRanges:
+          - max:
+              cpu: 512m
+              ephemeral-storage: 4.35Gi
+              memory: 1792Mi
+            type: Pod
+        name: medium
+        resourceDefaults:
+        - default:
+            cpu: 512m
+            ephemeral-storage: 500Mi
+            memory: 1792Mi
+          defaultRequest:
+            cpu: 50m
+            memory: 200Mi
+          type: Container
+      - constraints:
+          hardQuota:
+            requests.cpu: "4"
+            requests.memory: 14Gi
+          limitRanges:
+          - max:
+              cpu: "1"
+              ephemeral-storage: 8.7Gi
+              memory: 3584Mi
+            type: Pod
+        name: large
+        resourceDefaults:
+        - default:
+            cpu: "1"
+            ephemeral-storage: 1Gi
+            memory: 3584Mi
+          defaultRequest:
+            cpu: 50m
+            memory: 200Mi
+          type: Container
+    region: uksouth
+    security:
+      podSecurityStandard:
+        allowed:
+        - restricted
+        - baseline
+        - privileged
+        defaultProfile: baseline
+        enabled: true
+    version: 1.25.6

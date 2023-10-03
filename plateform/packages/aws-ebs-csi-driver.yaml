@@ -1,0 +1,64 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Package
+metadata:
+  annotations:
+    defaults.appvia.io/version: v2.3.0-rc1-1692365545
+  labels:
+    packages.appvia.io/name: aws-ebs-csi-driver
+  name: aws-ebs-csi-driver
+spec:
+  dependencies:
+  - aws-ebs-csi-snapshot-validation-webhook
+  - aws-ebs-csi-snapshot-controller
+  installNamespace: kube-system
+  name: EBS CSI Storage Driver (AWS)
+  releaseName: aws-ebs-csi-driver
+  selectors:
+    matchExpressions:
+    - key: appvia.io/provider
+      operator: In
+      values:
+      - EKS
+  skipTests: true
+  source:
+    helm:
+      name: aws-ebs-csi-driver
+      url: http://wayfinder-charts.wf-manager.svc.cluster.local
+      version: 2.19.0
+  summary: Provides volumes to EKS clusters using AWS EBS
+  values:
+    controller:
+      serviceAccount:
+        name: ebs-csi-controller-sa
+  version: 2.19.0-1
+  workloadIdentity:
+    clusterServiceAccount:
+      name: ebs-csi-controller-sa
+      namespace: kube-system
+    providerDetails:
+      aws:
+        customIAMPolicy:
+          Statement:
+          - Action:
+            - kms:RevokeGrant
+            - kms:CreateGrant
+            - kms:ListGrants
+            Condition:
+              Bool:
+                kms:GrantIsForAWSResource: "true"
+            Effect: Allow
+            Resource: arn:aws:kms:*:*:key/*
+          - Action:
+            - kms:Decrypt
+            - kms:Encrypt
+            - kms:DescribeKey
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey*
+            Effect: Allow
+            Resource: arn:aws:kms:*:*:key/*
+          Version: "2012-10-17"
+        helmServiceAccountAnnotationsPaths:
+        - controller.serviceAccount.annotations
+        iamPolicies:
+        - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+    role: None

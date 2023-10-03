@@ -1,0 +1,35 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Package
+metadata:
+  name: opencost
+spec:
+  installNamespace: opencost
+  name: opencost
+  releaseName: opencost
+  selectors:
+    matchExpressions:
+    - key: appvia.io/managementcluster
+      operator: DoesNotExist
+  source:
+    helm:
+      name: opencost
+      url: https://opencost.github.io/opencost-helm-chart
+      version: v1.19.3
+  summary: opencost
+  values:
+    opencost:
+      prometheus:
+        internal:
+          # -- Use in-cluster Prometheus
+          enabled: true
+          # -- Service name of in-cluster Prometheus
+          serviceName: prometheus-server
+          # -- Namespace of in-cluster Prometheus
+          namespaceName: prometheus
+          # -- Service port of in-cluster Prometheus
+          port: 80
+  valuesFrom:
+  - cluster:
+      key: spec.cloudResourceName
+      path: opencost.exporter.defaultClusterId
+  version: v1.19.3

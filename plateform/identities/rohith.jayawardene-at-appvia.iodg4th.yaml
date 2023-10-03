@@ -1,0 +1,14 @@
+apiVersion: org.appvia.io/v2beta1
+kind: Identity
+metadata:
+  generateName: rohith.jayawardene-at-appvia.io
+  name: rohith.jayawardene-at-appvia.iodg4th
+spec:
+  accountType: SSO
+  email: rohith.jayawardene@appvia.io
+  provider: https://appvia.eu.auth0.com/
+  providerUID: google-oauth2|104914418423028855976
+  subject:
+    kind: User
+    name: rohith.jayawardene@appvia.io
+  username: rohith.jayawardene@appvia.io

@@ -1,0 +1,26 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Package
+metadata:
+  labels:
+    packages.appvia.io/name: keda
+  name: keda
+spec:
+  installNamespace: keda
+  name: keda
+  releaseName: keda
+  selectors:
+    matchExpressions:
+    - key: appvia.io/managementcluster
+      operator: DoesNotExist
+    - key: appvia.io/provider
+      operator: In
+      values:
+      - EKS
+  source:
+    helm:
+      name: keda
+      url: https://kedacore.github.io/charts
+      version: v2.11.1
+  summary: KEDA runtime for event-driven autoscaling
+  values: {}
+  version: v2.11.1-1

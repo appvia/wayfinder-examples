@@ -1,0 +1,16 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Repository
+metadata:
+  name: telegraf
+spec:
+  interval: 60m
+  selectors:
+    matchExpressions:
+    - key: appvia.io/managementcluster
+      operator: DoesNotExist
+    - key: appvia.io/provider
+      operator: In
+      values:
+      - EKS
+  timeout: 60s
+  url: https://helm.influxdata.com/

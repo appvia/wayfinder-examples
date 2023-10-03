@@ -1,0 +1,51 @@
+apiVersion: package.appvia.io/v2beta1
+kind: Package
+metadata:
+  labels:
+    packages.appvia.io/name: telegraf
+  name: telegraf
+spec:
+  installNamespace: telegraf
+  name: Telegraf
+  releaseName: telegraf
+  selectors:
+    matchExpressions:
+    - key: appvia.io/managementcluster
+      operator: DoesNotExist
+    - key: appvia.io/provider
+      operator: In
+      values:
+      - EKS
+  source:
+    helm:
+      name: telegraf-ds
+      url: https://helm.influxdata.com/
+      version: v1.1.10
+  summary: Telegraf agent for collecting and reporting metrics
+  values:
+    env:
+    - name: CLUSTER_NAME
+    - name: HOSTNAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: HOSTIP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.hostIP
+    - name: HOST_PROC
+      value: /hostfs/proc
+    - name: HOST_SYS
+      value: /hostfs/sys
+    - name: HOST_MOUNT_PREFIX
+      value: /hostfs
+  valuesFrom:
+  - secret:
+      key: toml
+      name: telegraf-config
+      namespace: ws-admin
+      path: override_config.toml
+  - cluster:
+      key: spec.cloudResourceName
+      path: env.0.value
+  version: v1.1.10-13

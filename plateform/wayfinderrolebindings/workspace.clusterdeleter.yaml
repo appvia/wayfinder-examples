@@ -1,0 +1,15 @@
+apiVersion: org.appvia.io/v2beta1
+kind: WayfinderRoleBinding
+metadata:
+  annotations:
+    defaults.appvia.io/version: v2.3.0-rc1-1692365545
+  name: workspace.clusterdeleter
+spec:
+  roleRef:
+    kind: WayfinderRole
+    name: workspace.clusterdeleter
+  subjects:
+  - kind: WorkspaceGroup
+    name: owner
+  - kind: WayfinderGroup
+    name: admin
