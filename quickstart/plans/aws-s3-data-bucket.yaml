@@ -1,0 +1,146 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-s3-data-bucket
+  version: "1.0.0"
+spec:
+  cloud: aws
+  description: "S3 bucket for application data, with read-only / read-write / write-only consumption policies that other components can be granted."
+  scope:
+    allWorkspaces: true
+  inputs:
+    - name: versioning
+      description: "Enable object versioning. Use with caution — makes deletion harder."
+      type: bool
+      optional: true
+      defaultValue: false
+    - name: disable_force_destroy
+      description: "Disable force destroy. Use with caution — teardown will fail while objects remain."
+      type: bool
+      optional: true
+      defaultValue: false
+    - name: suffix
+      description: "Differentiates buckets within a stack instance. Combined with stack+instance to form the bucket prefix."
+      type: string
+      optional: true
+      defaultValue: "data"
+
+  # This is a PROVIDER plan: it has no workload identity of its own. Instead it
+  # publishes consumption policies that other components can be granted from the
+  # manifest. Wayfinder turns a grant into the IAM policy below and attaches it to
+  # the consumer's role — no IAM written by hand.
+  consumptionPolicies:
+    - name: read-only
+      grantPermissions:
+        aws:
+          customIAMPolicyTemplate: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AppReadOnly",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:ListBucket"
+                  ],
+                  "Resource": [
+                    "${{ .Outputs.s3_bucket_arn }}",
+                    "${{ .Outputs.s3_bucket_arn }}/*"
+                  ]
+                }
+              ]
+            }
+    - name: read-write
+      grantPermissions:
+        aws:
+          customIAMPolicyTemplate: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AppReadWrite",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:DeleteObject",
+                    "s3:ListBucket"
+                  ],
+                  "Resource": [
+                    "${{ .Outputs.s3_bucket_arn }}",
+                    "${{ .Outputs.s3_bucket_arn }}/*"
+                  ]
+                }
+              ]
+            }
+    - name: write-only
+      grantPermissions:
+        aws:
+          customIAMPolicyTemplate: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AppWriteOnly",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": [
+                    "${{ .Outputs.s3_bucket_arn }}/*"
+                  ]
+                }
+              ]
+            }
+
+  terraform:
+    modules:
+      - name: s3_bucket
+        source: "https://github.com/terraform-aws-modules/terraform-aws-s3-bucket"
+        version: "v4.1.2"
+    files:
+      - name: main.tf
+        template: |
+          module "s3_bucket" {
+            source = ${{ .Modules.s3_bucket.Source | quote }}
+
+            bucket_prefix = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}-"
+
+            ${{- if .Inputs.versioning }}
+            versioning = {
+              enabled = true
+            }
+            ${{- end }}
+
+            server_side_encryption_configuration = {
+              rule = {
+                apply_server_side_encryption_by_default = {
+                  sse_algorithm = "AES256"
+                }
+              }
+            }
+
+            # AWS blocks public access on new buckets by default; don't attach a
+            # public policy (and avoid s3:PutBucketPublicAccessBlock, which some
+            # account guardrails deny).
+            attach_public_policy = false
+
+            ${{- if not .Inputs.disable_force_destroy }}
+            force_destroy = true
+            ${{- end }}
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+      - name: outputs.tf
+        template: |
+          output "s3_bucket_arn" {
+            value = module.s3_bucket.s3_bucket_arn
+          }
+          output "s3_bucket_id" {
+            value = module.s3_bucket.s3_bucket_id
+          }

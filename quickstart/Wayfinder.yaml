@@ -1,0 +1,24 @@
+apiVersion: v1
+name: hello-wayfinder
+description: "A function that reads and writes a bucket — wired with one access grant, zero IAM."
+
+components:
+  # The bucket. A pure provider: it publishes consumption policies (read-only,
+  # read-write, write-only) but holds no identity itself.
+  datastorage:
+    type: CloudResource
+    plan: aws-s3-data-bucket@1.0.0
+
+  # The function. It gets its own cloud-native AWS identity and — because of the
+  # single grant below — permission to read and write `datastorage`. Wayfinder
+  # provisions the IAM role and policy; you write no credentials anywhere.
+  processor:
+    type: CloudResource
+    plan: aws-lambda-inline@0.1.0
+    workloadIdentity:
+      access:
+        - consumptionPolicy: read-write
+          to: datastorage
+    inputs:
+      - name: bucket_name
+        value: "${{ .Components.datastorage.s3_bucket_id }}"
