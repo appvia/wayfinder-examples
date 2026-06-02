@@ -1,8 +1,4 @@
-<p align="center">
-    <img alt="Wayfinder logo" title="Wayfinder" src="wayfinder-logo-color-horizontal.svg">
-</p>
-
-This repository provides an example set of configuration to get started using Wayfinder.
+This repository provides a set of examples to get started using Wayfinder.
 
 To use these examples, clone the repository, amend the configurations as you wish, then apply:
 
@@ -10,12 +6,12 @@ To use these examples, clone the repository, amend the configurations as you wis
 $ git clone https://github.com/appvia/wayfinder-examples.git
 $ cd wayfinder-examples
 
-# Apply files or folders of your choosing to your Wayfinder instance, for example, add all of the
-# example network and cluster plans:
-$ wf apply -f ./assignablenetworks
-$ wf apply -f ./clusternetworkplans
-$ wf apply -f ./clusterplans
+# Apply files or folders of your choosing to your Wayfinder tenant, for example, add the example quickstart plans:
+$ wf apply -f ./quickstart/plans
+
+# Build the example stack:
+$ cd ./quickstart/
+$ wf up
 ```
 
-You can also copy these definitions into your repository as a starting point for your own
-configuration.
+For full documentation, see the [quickstart readme](./quickstart/README.md) or [https://on.wayfinder.run/docs/getting-started/01-quick-start](https://on.wayfinder.run/docs/getting-started/01-quick-start).

@@ -1,0 +1,194 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-lambda-inline
+  version: "0.1.0"
+spec:
+  cloud: aws
+  description: >-
+    A getting-started AWS Lambda whose Python source is supplied inline as a
+    string and zipped at apply time. No container image, no ECR, no build step.
+    Exposes a public Lambda function URL so you can invoke it with curl. For
+    real workloads, deploy a container image instead — this plan exists purely
+    to get you to a working, identity-wired function in minutes.
+  scope:
+    allWorkspaces: true
+
+  # This Lambda is a CONSUMER: it gets a cloud-native AWS IAM role (no Kubernetes
+  # required). Permissions to reach OTHER components (e.g. a bucket) are granted
+  # declaratively from the manifest via `workloadIdentity.access` — Wayfinder
+  # attaches the matching IAM policy to this role. The base permissions below are
+  # only what the function needs to write its own CloudWatch logs.
+  workloadIdentity:
+    identityType: AWSRole
+    optional: false
+    basePermissions:
+      aws:
+        customIAMPolicyTemplate: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AppLogGroup",
+                "Effect": "Allow",
+                "Action": [
+                  "logs:CreateLogGroup"
+                ],
+                "Resource": "arn:aws:logs:${{ .Cloud.Region }}:${{ .Cloud.AWS.Account }}:*"
+              },
+              {
+                "Sid": "AppLog",
+                "Effect": "Allow",
+                "Action": [
+                  "logs:CreateLogStream",
+                  "logs:PutLogEvents"
+                ],
+                "Resource": "arn:aws:logs:${{ .Cloud.Region }}:${{ .Cloud.AWS.Account }}:log-group:/aws/lambda/${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}:*"
+              }
+            ]
+          }
+    restrictAccessTo:
+      trustedService: "lambda.amazonaws.com"
+      resourceIDTemplate: "${{ .Outputs.lambda_function_arn }}"
+
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          # The handler source arrives as a plain string input and is zipped in
+          # place by the archive provider — that is the whole "no build" trick.
+          data "archive_file" "fn" {
+            type        = "zip"
+            output_path = "${path.module}/function.zip"
+            source {
+              content  = ${{ .Inputs.handler_code | quote }}
+              filename = "index.py"
+            }
+          }
+
+          resource "aws_lambda_function" "this" {
+            function_name = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}"
+            description   = "Inline Python Lambda (${{ .Inputs.suffix }}) managed by Wayfinder"
+
+            runtime = "python3.12"
+            handler = "index.handler"
+
+            filename         = data.archive_file.fn.output_path
+            source_code_hash = data.archive_file.fn.output_base64sha256
+
+            # Execution role — provided by Wayfinder workload identity. The function
+            # has no stored credentials of its own.
+            role = "${{ .WorkloadIdentity.AWS.RoleARN }}"
+
+            timeout     = ${{ .Inputs.timeout | default 30 }}
+            memory_size = ${{ .Inputs.memory_size | default 128 }}
+
+            environment {
+              variables = {
+                BUCKET   = "${{ .Inputs.bucket_name }}"
+                APP_NAME = "${{ .Stack.Name }}"
+                APP_ENV  = "${{ .Stack.Instance.Name }}"
+              }
+            }
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          # A public function URL so the quick start can invoke it with curl.
+          # NOTE: authorization_type = NONE means anyone with the URL can call it.
+          # Fine for a throwaway quick start; use IAM/auth for anything real.
+          resource "aws_lambda_function_url" "this" {
+            function_name      = aws_lambda_function.this.function_name
+            authorization_type = "NONE"
+          }
+
+          resource "aws_lambda_permission" "url" {
+            statement_id           = "AllowPublicFunctionUrl"
+            action                 = "lambda:InvokeFunctionUrl"
+            function_name          = aws_lambda_function.this.function_name
+            principal              = "*"
+            function_url_auth_type = "NONE"
+          }
+      - name: outputs.tf
+        template: |
+          output "lambda_function_arn" {
+            value = aws_lambda_function.this.arn
+          }
+          output "lambda_function_name" {
+            value = aws_lambda_function.this.function_name
+          }
+          output "function_url" {
+            value = aws_lambda_function_url.this.function_url
+          }
+
+  inputs:
+    - name: suffix
+      description: "Disambiguates the function within a stack instance. Final name: ${stack}-${instance}-${suffix}."
+      type: string
+      optional: true
+      defaultValue: "fn"
+    - name: bucket_name
+      description: "Name of the bucket this function should read/write. Wire it from a sibling component, e.g. ${{ .Components.datastorage.s3_bucket_id }}."
+      type: string
+      optional: false
+    - name: handler_code
+      description: "Python source for the function, deployed inline. Must define a `handler(event, context)` entrypoint. boto3 is preinstalled in the Lambda Python runtime."
+      type: string
+      optional: true
+      defaultValue: |
+        import json
+        import os
+        import time
+
+        import boto3
+
+        s3 = boto3.client("s3")
+        BUCKET = os.environ["BUCKET"]
+
+
+        def handler(event, context):
+            # Write a small object — proving this function can WRITE to the bucket.
+            # ServerSideEncryption is set on the request (not just the bucket default)
+            # because many AWS Organizations enforce an SCP that denies PutObject without
+            # the s3:x-amz-server-side-encryption header. It's harmless where no such SCP
+            # exists, so we always send it.
+            key = f"hello-{int(time.time())}.txt"
+            s3.put_object(
+                Bucket=BUCKET,
+                Key=key,
+                Body=b"Hello from a Wayfinder-wired Lambda!\n",
+                ServerSideEncryption="AES256",
+            )
+
+            # List what's there — proving it can READ too.
+            listing = s3.list_objects_v2(Bucket=BUCKET)
+            keys = [obj["Key"] for obj in listing.get("Contents", [])]
+
+            return {
+                "statusCode": 200,
+                "headers": {"content-type": "application/json"},
+                "body": json.dumps(
+                    {
+                        "wrote": key,
+                        "bucket": BUCKET,
+                        "objects": keys,
+                        "note": "This function holds zero stored credentials. "
+                        "Wayfinder brokered its access to the bucket.",
+                    },
+                    indent=2,
+                ),
+            }
+    - name: timeout
+      description: "Lambda execution timeout in seconds."
+      type: number
+      optional: true
+      defaultValue: 30
+    - name: memory_size
+      description: "Lambda memory allocation in MB."
+      type: number
+      optional: true
+      defaultValue: 128
