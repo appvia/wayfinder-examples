@@ -1,0 +1,124 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: azure-container-aci
+  version: "1.0.0"
+spec:
+  cloud: azure
+  description: >-
+    A getting-started Azure workload on Container Instances (ACI). Terraform
+    provisions a single container group running a small, open-source public image
+    that reads and writes a blob using the managed identity Wayfinder attaches to
+    it. No code push, no build step, no registry credentials — the image is public
+    and its source lives alongside this plan in image/. Exposes a public, anonymous
+    HTTP endpoint you can curl. For real workloads, build and deploy your own image.
+  scope:
+    allWorkspaces: true
+
+  # CONSUMER: gets a cloud-native Azure user-assigned managed identity (no
+  # Kubernetes). The grant in the manifest becomes the role assignment Wayfinder
+  # applies to this identity. The plan attaches the identity to the container group
+  # with its resource ID and selects it at runtime with its client ID.
+  workloadIdentity:
+    identityType: AzureUserManagedIdentity
+    optional: false
+    azureResourceGroupTemplate: "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-rg"
+    restrictAccessTo:
+      trustedService: "Microsoft.ContainerInstance/containerGroups"
+      resourceIDTemplate: "${{ .Outputs.container_group_id }}"
+
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          # The shared resource group is created by the storage component; reuse it.
+          data "azurerm_resource_group" "this" {
+            name = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-rg"
+          }
+
+          # The public DNS label for the container's public IP must be unique within
+          # the region, so derive a stable prefix and append a short random suffix.
+          resource "random_id" "dns" {
+            byte_length = 3
+          }
+
+          locals {
+            dns_prefix = substr(lower(replace("${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}", "/[^a-z0-9-]/", "")), 0, 50)
+            dns_label  = "${local.dns_prefix}-${random_id.dns.hex}"
+          }
+
+          resource "azurerm_container_group" "this" {
+            name                = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}"
+            resource_group_name = data.azurerm_resource_group.this.name
+            location            = data.azurerm_resource_group.this.location
+            os_type             = "Linux"
+
+            # A public IP with a stable FQDN: http://<dns_label>.<region>.azurecontainer.io
+            ip_address_type = "Public"
+            dns_name_label  = local.dns_label
+
+            # Attach the Wayfinder-provisioned managed identity. This is what the
+            # client ID alone cannot do — attachment needs the identity's resource ID.
+            identity {
+              type         = "UserAssigned"
+              identity_ids = ["${{ .WorkloadIdentity.Azure.ResourceID }}"]
+            }
+
+            container {
+              name   = "hello"
+              image  = "${{ .Inputs.image }}"
+              cpu    = "0.5"
+              memory = "1.0"
+
+              ports {
+                port     = 80
+                protocol = "TCP"
+              }
+
+              environment_variables = {
+                # Selects WHICH assigned identity the running code authenticates as.
+                AZURE_CLIENT_ID = "${{ .WorkloadIdentity.Azure.ClientID }}"
+
+                # The application data storage to read/write, wired from the manifest.
+                DATA_ACCOUNT   = "${{ .Inputs.data_account }}"
+                DATA_CONTAINER = "${{ .Inputs.data_container }}"
+              }
+            }
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+      - name: outputs.tf
+        template: |
+          output "container_group_id" {
+            value = azurerm_container_group.this.id
+          }
+          output "resource_group_name" {
+            value = data.azurerm_resource_group.this.name
+          }
+          output "app_url" {
+            value = "http://${azurerm_container_group.this.fqdn}"
+          }
+
+  inputs:
+    - name: suffix
+      description: "Disambiguates the workload within a stack instance. Final name: ${stack}-${instance}-${suffix}."
+      type: string
+      optional: true
+      defaultValue: "app"
+    - name: image
+      description: "The public container image to run. Defaults to the open-source quick-start image; swap it for your own."
+      type: string
+      optional: true
+      defaultValue: "ghcr.io/appvia/wayfinder-examples/azure-blob-hello:1.0.0"
+    - name: data_account
+      description: "Name of the storage account this workload should read/write. Wire it from a sibling component, e.g. ${{ .Components.datastorage.storage_account_name }}."
+      type: string
+      optional: false
+    - name: data_container
+      description: "Name of the blob container to read/write. Wire it from a sibling component, e.g. ${{ .Components.datastorage.container_name }}."
+      type: string
+      optional: false

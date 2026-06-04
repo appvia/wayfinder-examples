@@ -1,4 +1,4 @@
-This repository provides a set of examples to get started using Wayfinder.
+This repository provides a set of examples to get started using [Wayfinder](https://on.wayfinder.run/).
 
 To use these examples, clone the repository, amend the configurations as you wish, then apply:
 
@@ -6,11 +6,11 @@ To use these examples, clone the repository, amend the configurations as you wis
 $ git clone https://github.com/appvia/wayfinder-examples.git
 $ cd wayfinder-examples
 
-# Apply files or folders of your choosing to your Wayfinder tenant, for example, add the example quickstart plans:
-$ wf apply -f ./quickstart/plans
+# Apply files or folders of your choosing to your Wayfinder tenant, for example, add the example quickstart plans on AWS:
+$ wf apply -f ./quickstart/aws/plans
 
 # Build the example stack:
-$ cd ./quickstart/
+$ cd ./quickstart/aws/
 $ wf up
 ```
 

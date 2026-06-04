@@ -1,0 +1,28 @@
+apiVersion: v1
+name: hello-wayfinder
+description: "A container that reads and writes a blob container — wired with one access grant, zero role assignments by hand."
+
+components:
+  # The storage account + container. A pure provider: it publishes consumption
+  # policies (read-only, read-write) but holds no identity itself.
+  datastorage:
+    type: CloudResource
+    plan: azure-storage-data@1.0.0
+
+  # The workload. It gets its own cloud-native Azure managed identity and — because
+  # of the single grant below — permission to read and write `datastorage`. Wayfinder
+  # creates the identity and applies the role assignment; you write no credentials
+  # anywhere. Terraform provisions a container group running a small, open-source
+  # public image (no code push, no build, no registry credentials).
+  processor:
+    type: CloudResource
+    plan: azure-container-aci@1.0.0
+    workloadIdentity:
+      access:
+        - consumptionPolicy: read-write
+          to: datastorage
+    inputs:
+      - name: data_account
+        value: "${{ .Components.datastorage.storage_account_name }}"
+      - name: data_container
+        value: "${{ .Components.datastorage.container_name }}"
