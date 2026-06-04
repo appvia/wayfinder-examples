@@ -1,0 +1,62 @@
+# Publishes the Azure quick-start container image to GitHub Container Registry.
+#
+# NOTE: paths here assume this file lives at the ROOT of the public
+# `wayfinder-examples` repo (i.e. the image source is at `quickstart/azure/image/`).
+# It is shipped here under `examples/quickstart/.github/` only so it can be copied
+# across; adjust `paths:` / `context:` if your layout differs.
+#
+# One-time setup after first run: make the published package PUBLIC in the repo
+# (or org) package settings, so Azure Container Instances can pull it without
+# credentials. GHCR packages are private by default.
+name: Publish Azure quick-start image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "quickstart/azure/image/**"
+      - ".github/workflows/publish-azure-quickstart-image.yml"
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io
+  # TODO: confirm this matches the public repo's owner/name.
+  IMAGE_NAME: ${{ github.repository }}/azure-blob-hello
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags
+        # latest + the git tag (when pushed as vN.N.N) + the short SHA.
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=sha,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: quickstart/azure/image
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
