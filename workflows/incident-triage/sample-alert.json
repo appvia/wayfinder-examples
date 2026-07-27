@@ -1,0 +1,33 @@
+{
+  "receiver": "wayfinder-incident-triage",
+  "status": "firing",
+  "version": "4",
+  "groupKey": "{}:{alertname=\"High error rate on checkout\"}",
+  "externalURL": "https://REPLACE-ME.eu.signoz.cloud",
+  "commonLabels": {
+    "alertname": "High error rate on checkout",
+    "severity": "critical"
+  },
+  "groupLabels": {
+    "alertname": "High error rate on checkout"
+  },
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "High error rate on checkout",
+        "severity": "critical",
+        "service.name": "checkout",
+        "deployment.environment": "prod"
+      },
+      "annotations": {
+        "summary": "5xx rate on checkout above 5% for 5 minutes",
+        "description": "The checkout service is returning HTTP 500 for 12% of requests, up from a 0.2% baseline. Onset was sudden."
+      },
+      "startsAt": "2026-07-26T09:14:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://REPLACE-ME.eu.signoz.cloud/alerts/edit?ruleId=42",
+      "fingerprint": "7d9f2c1ab34e5f60"
+    }
+  ]
+}

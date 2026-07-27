@@ -1,0 +1,36 @@
+# The identity the investigation runs as.
+#
+# A workflow-triggered run has no interactive user to borrow permissions from, so
+# the workflow's ai/agent task names a ServiceAccount and the conversation's tools
+# execute with exactly that account's RBAC. Without one, every Wayfinder tool the
+# agent calls fails — there is no identity to impersonate.
+#
+# Read-only on purpose. The agent observes and reports; the only things that write
+# anything are the GitHub and Slack tasks, which act with their own credentials
+# under a condition you authored. The "viewer" role is read across the tenant's
+# workspaces and environments — narrow it to specific workspaces with a
+# workspace-scoped RoleBinding if you would rather bound what an investigation
+# can see.
+#
+# Wayfinder checks that whoever authors the Workflow holds a superset of this
+# account's permissions, so a run can never exceed the person who set it up.
+apiVersion: org/v3
+kind: ServiceAccount
+metadata:
+  name: incident-investigator
+  workspace: my-team
+spec:
+  description: Read-only identity for hands-off incident investigations
+---
+apiVersion: org/v3
+kind: RoleBinding
+metadata:
+  name: incident-investigator-viewer
+  workspace: my-team
+spec:
+  roles:
+    - viewer
+  subject:
+    kind: ServiceAccount
+    name: incident-investigator
+    workspace: my-team

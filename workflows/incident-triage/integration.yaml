@@ -1,0 +1,22 @@
+# The tenant Integration that owns every moving part of this example: the MCP
+# servers the agent investigates with, the inbound Webhook SigNoz delivers alerts
+# to, and the outbound WebAPIs the workflow calls to raise a GitHub issue and
+# post to Slack.
+#
+# Every MCP, Webhook and WebAPI must belong to an integration
+# (spec.integrationRef); a custom integration like this one is always
+# extensible, so it can host all three. Everything in this example is
+# tenant-defined — it deliberately depends on none of Wayfinder's shipped
+# integration definitions, so it works on any tenant with nothing but the
+# credentials you supply.
+#
+# This name is the first segment of every workflow action path (e.g.
+# "incident-tools/webapi/github/create-issue"), so renaming it means renaming
+# those too.
+apiVersion: integrations/v3
+kind: Integration
+metadata:
+  name: incident-tools
+spec:
+  type: custom
+  description: Observability, source-control and chat endpoints used for AI-assisted incident triage.

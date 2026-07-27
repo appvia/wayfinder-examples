@@ -1,0 +1,155 @@
+# Incident triage, end to end and hands-off:
+#
+#   SigNoz alert fires
+#     -> delivered to the signoz-alerts webhook
+#     -> the delivery fires this workflow
+#     -> the incident-investigator agent investigates autonomously and submits
+#        structured findings (including its own severity judgement)
+#     -> critical or high  : a GitHub issue is opened
+#     -> critical only     : a Slack message pages the channel, linking the issue
+#
+# Nothing here is Wayfinder-shipped: the integration, webhook, WebAPIs, agent,
+# result schema and identity are all tenant-defined siblings of this file.
+#
+# WORKSPACE-SCOPED, deliberately — the run engine is workspace-scoped, and the
+# WebhookInvocation that fires the run must be in the same workspace for the
+# broker's reach-down check to pass. Use the same workspace as
+# webhook-signoz-alerts.yaml.
+apiVersion: orchestration/v3
+kind: Workflow
+metadata:
+  name: incident-triage
+  workspace: my-team
+spec:
+  description: Investigate a SigNoz alert with an AI agent, then raise an issue and page Slack according to the severity it judges.
+
+  # Static, author-fixed configuration — the same for every run, and the one place
+  # to change where issues and notifications land.
+  config:
+    issueOwner: REPLACE-GITHUB-ORG
+    issueRepo: REPLACE-GITHUB-REPO
+    slackChannel: "#incidents"
+
+  triggers:
+    # Fires when a delivery has been fully processed: the ingest handler emits the
+    # invocation's ProcessingCompleted (event: Completed) only after the delivery
+    # record is durably written, so a run always sees .Resource.delivery.
+    #
+    # The when: keeps this workflow to its own webhook's deliveries, and to alerts
+    # that are actually firing — SigNoz sends the same shape when an alert resolves,
+    # and there is nothing to investigate about a recovery.
+    - name: signoz_alert
+      resource: WebhookInvocation
+      event: Completed
+      when: >-
+        ${{ and (eq .Resource.spec.webhookRef.name "signoz-alerts")
+                (eq (index (fromJson .Resource.delivery.body).alerts 0).status "firing") }}
+
+  tasks:
+    # ---------------------------------------------------------------------------
+    # 1. Investigate. Dispatches an AIConversation running the tenant's
+    #    incident-investigator agent, autonomously (no user to answer questions)
+    #    and with the read-only identity from identity.yaml. It finishes by calling
+    #    submit_result, whose payload becomes this task's output.
+    # ---------------------------------------------------------------------------
+    investigate:
+      action: ai/agent/incident-investigator
+      # tenant:name for a tenant-scoped account (tenant:workspace:name for a
+      # workspace one). Without this the conversation has no identity and every
+      # Wayfinder tool the agent calls fails.
+      serviceAccount: 'REPLACE-TENANT:my-team:incident-investigator'
+      inputs:
+        # "prompt" is required on an ai/agent task. This agent renders its opening
+        # message from its own userPromptTemplate over the inputs below, so this
+        # value is not what the agent reads — the inputs are.
+        - name: prompt
+          value: Investigate the attached SigNoz alert.
+        # The alert's own fields, mapped onto the agent's input schema. A raw JSON
+        # body is parsed in-template with sprig fromJson; SigNoz delivers an
+        # Alertmanager-shaped batch, and alerts[0] is the alert that fired.
+        - name: summary
+          value: '${{ (index (fromJson .Resource.delivery.body).alerts 0).labels.alertname }}'
+        # A dotted label name needs `index`, not the bracket form: these are Go
+        # templates, and bracket indexing is JQ syntax (valid in a webhook's
+        # storage mappings, not here).
+        - name: service
+          value: '${{ index (index (fromJson .Resource.delivery.body).alerts 0).labels "service.name" }}'
+        - name: severity
+          value: '${{ (index (fromJson .Resource.delivery.body).alerts 0).labels.severity }}'
+        - name: startedAt
+          value: '${{ (index (fromJson .Resource.delivery.body).alerts 0).startsAt }}'
+        # The whole delivery, so nothing in the payload is lost to the mapping
+        # above — the agent reads the full batch, annotations and generator URL
+        # included.
+        - name: details
+          value: '${{ .Resource.delivery.body }}'
+
+    # ---------------------------------------------------------------------------
+    # 2. Raise a GitHub issue — but only for an incident the investigator judged
+    #    critical or high. Anything less is left in the alert history.
+    #
+    #    The result check comes first for a reason: an investigation that could not
+    #    reach a conclusion submits result "failed" and no findings at all, and
+    #    template conditions are evaluated left to right, stopping at the first
+    #    false one.
+    # ---------------------------------------------------------------------------
+    raise_issue:
+      dependsOn: [investigate]
+      when: >-
+        ${{ and (eq .Tasks.investigate.output.result "generated")
+                (has .Tasks.investigate.output.findings.severity (list "critical" "high")) }}
+      action: incident-tools/webapi/github/create-issue
+      inputs:
+        - name: owner
+          value: '${{ .Config.issueOwner }}'
+        - name: repo
+          value: '${{ .Config.issueRepo }}'
+        - name: title
+          value: >-
+            [${{ .Tasks.investigate.output.findings.severity }}]
+            ${{ .Tasks.investigate.output.findings.whatHappened }}
+        # The agent's markdown write-up, plus the machine-readable findings so the
+        # issue carries the evidence a human needs to re-walk the investigation.
+        - name: body
+          value: |-
+            ${{ .Tasks.investigate.output.responseToUser }}
+
+            ---
+            **Root cause** (confidence: ${{ .Tasks.investigate.output.findings.confidence }}): ${{ .Tasks.investigate.output.findings.rootCause }}
+
+            <details><summary>Full findings</summary>
+
+            ```json
+            ${{ .Tasks.investigate.output.findings | toPrettyJson }}
+            ```
+
+            </details>
+
+            _Raised automatically by the `incident-triage` workflow from SigNoz alert
+            `${{ (index (fromJson .Resource.delivery.body).alerts 0).labels.alertname }}`._
+        - name: labels
+          value: 'incident,${{ .Tasks.investigate.output.findings.severity }}'
+
+    # ---------------------------------------------------------------------------
+    # 3. Page Slack — critical only, and only once the issue exists, so the message
+    #    can link to it.
+    #
+    #    It depends on BOTH tasks because a task can only read the outputs of its
+    #    direct dependencies: raise_issue for the issue URL, investigate for the
+    #    findings. That is safe with the survivor-join — a medium-severity verdict
+    #    skips raise_issue, and this task's own when: then keeps it skipped too.
+    # ---------------------------------------------------------------------------
+    notify_slack:
+      dependsOn: [investigate, raise_issue]
+      when: '${{ eq .Tasks.investigate.output.findings.severity "critical" }}'
+      action: incident-tools/webapi/slack/post-message
+      inputs:
+        - name: channel
+          value: '${{ .Config.slackChannel }}'
+        # html_url comes free from GitHub's response: an invocation always retains
+        # the response body, and a task's output is that body's fields.
+        - name: text
+          value: |-
+            :rotating_light: *Critical incident* — ${{ .Tasks.investigate.output.findings.whatHappened }}
+            *Root cause* (confidence: ${{ .Tasks.investigate.output.findings.confidence }}): ${{ .Tasks.investigate.output.findings.rootCause }}
+            *Issue*: ${{ .Tasks.raise_issue.output.html_url }}

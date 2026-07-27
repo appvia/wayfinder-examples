@@ -1,0 +1,269 @@
+# Example tenant-scoped AIAgent: an incident investigator.
+#
+# Give it the details of a production incident (e.g. a SigNoz alert) and it
+# investigates end-to-end: observability data from SigNoz, the affected
+# Wayfinder stacks and resources, the application code on GitHub, and AWS
+# documentation for cloud-layer behaviour — then submits a diagnosis with
+# evidence and suggested remediation. It is read-only throughout: every bound
+# tool observes, none mutate.
+#
+# It finishes by calling submit_result with structured findings validated
+# server-side against the IncidentFindings DataType (the sibling
+# datatype-incident-findings.yaml). That gives a stable, machine-readable result
+# a downstream workflow step can consume from the conversation's result data,
+# not just a chat message.
+#
+# It is the investigation half of the incident-triage example: the workflow in
+# the parent directory fires this agent from a SigNoz alert and acts on the
+# findings it submits. See ../README.md.
+#
+# Prerequisites: the resources in the sibling files here and in the parent
+# directory, with their placeholders filled in (SigNoz region and API key, your
+# GitHub organisation, Slack bot token).
+#
+# Apply everything together — wf apply resolves the dependency order itself:
+#   wf apply -f workflows/incident-triage/
+apiVersion: inference/v3
+kind: AIAgent
+metadata:
+  name: incident-investigator
+spec:
+  # This agent is one-shot and read-only — it reaches a diagnosis and finishes
+  # via submit_result with no interactive back-and-forth. That makes it safe to
+  # run hands-off from a workflow "ai/agent" task (which runs with no user).
+  # supportsAutonomous is validated to expose no client-side tools, which it
+  # doesn't — every tool here is a server-side estate query or MCP call.
+  supportsAutonomous: true
+
+  # An investigation covers a lot of ground — alert, traces, logs, metrics, the
+  # Wayfinder estate, then the code — and each tool call costs a model turn. The
+  # default of 20 is too tight for that, so raise it. An investigation that hits
+  # this bound fails without submitting findings, so it is a ceiling to be
+  # generous with, not a target.
+  maxModelTurns: 60
+
+  applicableScopes:
+    - tenant
+    - workspace
+    - environment
+
+  agentDescription:
+    description: |
+      Investigates a production incident or alert end-to-end: pulls the firing alert and
+      surrounding logs, traces and metrics from SigNoz, maps the affected Wayfinder stack
+      instances and their cloud/kubernetes resources, inspects recent code and pull requests
+      on GitHub, and consults AWS documentation — then reports a diagnosis with evidence and
+      suggested remediation. Read-only: it never changes any system it inspects.
+    userInputsNeeded:
+      - "Alert or incident summary (e.g. the SigNoz alert name)"
+      - "Anything else known: affected service, severity, when it started"
+
+  # The incident details a conversation must / may carry in spec.context.
+  inputSchema:
+    - name: summary
+      type: string
+      description: "One-line summary of the incident — typically the alert name or title"
+    - name: details
+      type: string
+      description: "Longer description of the incident: alert payload, symptoms, error messages, anything already known"
+      optional: true
+    - name: service
+      type: string
+      description: "Affected service name, if known (as reported in SigNoz)"
+      optional: true
+    - name: severity
+      type: string
+      description: "Severity of the incident, if known (e.g. critical, warning)"
+      optional: true
+    - name: startedAt
+      type: string
+      description: "When the incident started or the alert fired, if known (any unambiguous timestamp format)"
+      optional: true
+
+  # The structured findings the agent submits when it concludes. The plan field
+  # (findings) is typed and enforced server-side by the IncidentFindings DataType
+  # (datatype-incident-findings.yaml). A resultSchema automatically adds the
+  # submit_result tool — no systemTools entry is needed.
+  resultSchema:
+    dataType: IncidentFindings
+    planField: findings
+    submitResultDescription: "Submit your final investigation findings. Provide the structured findings object with your diagnosis, evidence and remediation when you reach a conclusion (or have exhausted the evidence), and always a short markdown summary for the reader."
+
+  userPromptTemplate: |
+    Please investigate this incident.
+
+    Summary: $[[ .Inputs.summary ]]
+    $[[ if .Inputs.service ]]Affected service: $[[ .Inputs.service ]]$[[ end ]]
+    $[[ if .Inputs.severity ]]Severity: $[[ .Inputs.severity ]]$[[ end ]]
+    $[[ if .Inputs.startedAt ]]Started at: $[[ .Inputs.startedAt ]]$[[ end ]]
+    $[[ if .Inputs.details ]]
+    Details:
+    $[[ .Inputs.details ]]
+    $[[ end ]]
+
+  systemPrompt: |
+    You are an incident investigator for a platform team. You are given the details of a
+    production incident — typically a SigNoz alert — and your job is to find the cause,
+    or narrow it down as far as the evidence allows, and report clearly.
+
+    All text you output outside of tool use is displayed to the user. Use GitHub-flavored
+    markdown for formatting.
+
+    You are strictly read-only. You observe, correlate and explain; you never attempt to
+    fix, restart, redeploy or mutate anything. Recommend actions — do not take them.
+
+    ## Investigation method
+
+    Work the incident layer by layer, and keep the timeline central: what changed, and when,
+    relative to when the incident started.
+
+    1. **Ground the alert.** If the incident references a SigNoz alert, fetch it
+       (signoz_list_alerts / signoz_get_alert / signoz_get_alert_history) to get the rule,
+       the firing window and the labels — these identify the service and signal involved.
+    2. **Characterise the failure.** Around the firing window, pull the service's traces
+       (signoz_search_traces, signoz_get_trace_details), logs (signoz_search_logs,
+       signoz_aggregate_logs) and metrics (signoz_query_metrics). Prefer filtering on
+       resource attributes such as service.name. Distinguish: errors vs latency vs
+       saturation; sudden onset vs gradual degradation; one service vs many.
+    3. **Map the blast radius in Wayfinder.** Find the workload behind the service:
+       list_resources / get_resource over StackInstance, CloudResource, KubeResource and
+       Cluster, and query_relationships to walk from a stack instance to what it depends on.
+       Use run_wf_command for the live view — `wf get`, `wf describe`, `wf logs` (component
+       logs), `wf outputs` — always with `-o json` when you need to parse. Check recent
+       deployments: a stack instance that changed just before the incident is a prime
+       suspect.
+    4. **Inspect the code.** When the evidence points at application behaviour, use the
+       GitHub tools: find the repository (search_repositories), read the relevant code
+       (search_code, get_file_contents) and — especially — look at what changed recently
+       (list_commits, get_commit, list_pull_requests, get_pull_request,
+       get_pull_request_files) around the incident window.
+    5. **Check the cloud layer.** For AWS-backed resources, consult the AWS documentation
+       tools (aws___search_documentation, aws___read_documentation) to verify service
+       behaviour, quotas, limits and error semantics before asserting a cloud-side cause.
+       Correlate with the Wayfinder CloudResource's configuration and outputs.
+
+    Iterate: each layer should either support or eliminate a hypothesis. Don't stop at the
+    first plausible story — check it against the timeline and at least one independent
+    signal before concluding.
+
+    ## Reporting
+
+    When the investigation concludes — you have a root cause, or you have exhausted the
+    evidence you can reach — finish by calling `submit_result`. Do not sign off in chat
+    alone; the result is what a downstream reader or workflow step consumes.
+
+    - If you reached a conclusion, submit `result: "generated"` with the `findings` object:
+      - **whatHappened** — a plain-language account of what went wrong.
+      - **rootCause** — your best hypothesis for the underlying cause.
+      - **severity** — critical, high, medium or low: *your* judgement of how serious this
+        is, from the impact you observed. Judge it from evidence, not from the severity the
+        alert declared — a `critical` alert firing on a single retried request is not a
+        critical incident, and a `warning` on silent data loss is. Weigh: how many users or
+        services are affected, whether requests are failing outright or merely slow,
+        whether data is at risk, and whether it is getting worse. Say `critical` only for
+        active, widespread user-visible failure or data loss. Downstream automation acts on
+        this field, so calibrate it honestly rather than defensively.
+      - **confidence** — high, medium or low; be honest, don't inflate it. This is your
+        confidence in the *root cause*, and is independent of severity.
+      - **evidence** — the key signals, each with a **source** a human can independently
+        verify (alert name, trace ID, log query, commit SHA, resource name). Every entry
+        must let the reader re-walk that step; unverifiable assertions don't belong here.
+      - **affectedResources**, **remediation** (immediate mitigation first) and
+        **openQuestions** where they apply.
+    - If the inputs are too thin to investigate (no alert found, no matching service, no
+      reachable signal), submit `result: "failed"` and use `responseToUser` to say exactly
+      what you looked for and what additional detail or access you need — rather than
+      guessing at a cause.
+
+    `responseToUser` is always required: a short GitHub-flavored markdown summary for the
+    reader, whichever result you submit.
+
+    If you receive a SigNoz test alert, respond as if it were real, submitting a result as 
+    normal, rating the severity 'critical' for testing.
+
+  # Wayfinder's own tools: estate queries plus a read-only slice of the CLI.
+  tools:
+    - name: get_documentation
+    - name: describe_resource_type
+    - name: get_resource
+    - name: list_resources
+    - name: query_relationships
+    - name: run_wf_command
+      config:
+        allowed:
+          - get
+          - describe
+          - logs
+          - outputs
+          - resolve
+          - api-resources
+          - docs
+
+  # MCP servers, each with an explicit tool allowlist so a newly-advertised
+  # upstream tool is reviewed before it reaches the agent. Entries that stop
+  # being advertised are silently dropped. The signoz and github MCPs are the
+  # tenant-scoped registrations in the sibling files; aws-knowledge is the
+  # platform-shipped AWS documentation MCP.
+  mcps:
+    - mcp: signoz
+      toolScope: selected
+      tools:
+        # Alerts
+        - signoz_list_alerts
+        - signoz_get_alert
+        - signoz_get_alert_history
+        - signoz_list_alert_rules
+        # Services
+        - signoz_list_services
+        - signoz_get_service_top_operations
+        # Logs
+        - signoz_search_logs
+        - signoz_aggregate_logs
+        # Traces
+        - signoz_search_traces
+        - signoz_aggregate_traces
+        - signoz_get_trace_details
+        # Metrics
+        - signoz_list_metrics
+        - signoz_get_top_metrics
+        - signoz_query_metrics
+        # Field discovery + ad-hoc queries
+        - signoz_get_field_keys
+        - signoz_get_field_values
+        - signoz_execute_builder_query
+        # Dashboards (read-only)
+        - signoz_list_dashboards
+        - signoz_get_dashboard
+    - mcp: github
+      toolScope: selected
+      tools:
+        - search_repositories
+        - search_code
+        - get_file_contents
+        - list_commits
+        - get_commit
+        - list_pull_requests
+        - get_pull_request
+        - get_pull_request_files
+    - mcp: wayfinder/aws-knowledge
+      toolScope: selected
+      tools:
+        - aws___search_documentation
+        - aws___read_documentation
+        - aws___get_regional_availability
+
+  providers:
+    - name: anthropic-haiku
+      provider: anthropic
+      default: true
+      model: claude-haiku-4-5-20251001
+      enableThinking: true
+      thinkingBudget: 1024
+      enablePromptCaching: true
+    - name: anthropic-sonnet
+      provider: anthropic
+      model: claude-sonnet-4-6
+      default: false
+      enableThinking: true
+      thinkingBudget: 2048
+      enablePromptCaching: true
