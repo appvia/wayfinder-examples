@@ -1,0 +1,49 @@
+# Outbound connection to Slack, so the incident-triage workflow can page a channel
+# when the agent judges an incident critical.
+#
+# This uses the Web API (chat.postMessage) with a bot token in an Authorization
+# header rather than an incoming-webhook URL, deliberately: Wayfinder records each
+# invocation's rendered request URL verbatim in the invocation record and redacts
+# only credential-sourced *headers*. An incoming-webhook URL is itself the
+# credential, so rendering one into the path would leave it in clear in every
+# delivery record. A header-borne token is redacted.
+apiVersion: integrations/v3
+kind: WebAPI
+metadata:
+  name: slack
+spec:
+  integrationRef: incident-tools
+  description: Slack Web API — post an incident notification to a channel.
+  enabled: true
+
+  connection:
+    baseURL: https://slack.com/api
+    headers:
+      Content-Type: application/json; charset=utf-8
+      # Sourced from the secret below, so it is redacted in the invocation record.
+      Authorization: Bearer ${{ .Auth.token }}
+    auth:
+      secretRef: slack-token
+
+  operations:
+    - name: post-message
+      summary: Post a message to a Slack channel
+      method: POST
+      path: /chat.postMessage
+      inputs:
+        - name: channel
+          description: Channel ID or name (e.g. "C0123456789" or "#incidents")
+          type: string
+        - name: text
+          description: Message text (Slack mrkdwn)
+          type: string
+      body: |
+        {
+          "channel": ${{ .Inputs.channel | toJson }},
+          "text": ${{ .Inputs.text | toJson }}
+        }
+      response:
+        # Slack answers 200 even when it rejects the call, putting the verdict in
+        # the body — so a status check alone would report a silent failure as
+        # success, and the workflow task would go green having posted nothing.
+        successCondition: ".statusCode == 200 and .body.ok == true"

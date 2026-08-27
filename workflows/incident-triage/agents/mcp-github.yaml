@@ -1,0 +1,31 @@
+# GitHub's hosted MCP server, giving AI agents access to repositories, code
+# search, commits and pull requests.
+#
+# Auth mode "githubApp" needs no stored secret: Wayfinder mints a fresh GitHub
+# App installation token per request using the GitHubOrg named below, and
+# re-mints it on expiry.
+# Prerequisite: the referenced GitHubOrg must exist with a completed (approved)
+# Wayfinder GitHub App installation — see githuborg.yaml.
+#
+# The same installation also backs the create-issue WebAPI
+# (../webapi-github.yaml), so the whole example holds no GitHub credential. This
+# MCP covers the agent's READ path; writing an issue happens outside the agent,
+# in a workflow task you gate. See ../README.md.
+#
+# The /readonly endpoint serves only the read-only subset of GitHub's MCP
+# tools — a belt-and-braces guarantee that agents bound to this MCP cannot
+# write to your repositories, on top of the per-agent tool allowlist (see
+# spec.mcps in incident-investigator.yaml).
+apiVersion: integrations/v3
+kind: MCP
+metadata:
+  name: github
+spec:
+  integrationRef: incident-tools
+  vendor: GitHub
+  description: GitHub repositories, code search, commits and pull requests (read-only).
+  endpoint: https://api.githubcopilot.com/mcp/readonly
+  enabled: true
+  auth:
+    mode: githubApp
+    githubOrgRef: REPLACE-GITHUB-ORG

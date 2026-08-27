@@ -1,0 +1,16 @@
+# The GitHub organisation the read-only GitHub MCP mints installation tokens
+# against. It must already have a completed (approved) Wayfinder GitHub App
+# installation — installationID is the ID GitHub assigned that installation.
+#
+# Replace both values with your own organisation's, and keep the name in step
+# with mcp-github.yaml's githubOrgRef.
+apiVersion: sourcecontrol/v3
+kind: GitHubOrg
+metadata:
+  name: REPLACE-GITHUB-ORG
+spec:
+  organization: REPLACE-GITHUB-ORG
+  # The ID GitHub assigned your Wayfinder App installation. Left at 0 on purpose:
+  # it is not a working default, so applying this unedited fails loudly rather
+  # than pointing at somebody else's organisation.
+  installationID: 0

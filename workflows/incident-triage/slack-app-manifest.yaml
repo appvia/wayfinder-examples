@@ -1,0 +1,35 @@
+# A Slack app manifest, NOT a Wayfinder resource — this one is pasted into
+# Slack, not applied with `wf apply`.
+#
+# At api.slack.com/apps choose "Create New App" -> "From an app manifest", pick
+# your workspace, and paste this. Then "Install to Workspace" and copy the Bot
+# User OAuth Token (starts "xoxb-") from OAuth & Permissions into
+# secret-slack-token.yaml.
+#
+# Why these settings:
+#   chat:write         — post messages. The only scope strictly required.
+#   chat:write.public  — post to PUBLIC channels the bot has not been invited
+#                        to. Without it, posting fails with "not_in_channel"
+#                        until someone runs `/invite @Wayfinder` in the channel.
+#                        A PRIVATE channel always needs the invite regardless.
+#   token_rotation_enabled: false
+#                      — load-bearing. With rotation on, the bot token expires
+#                        every 12 hours and must be refreshed; WebAPI auth has
+#                        no refresh step, so the integration would start failing
+#                        half a day after it was set up.
+display_information:
+  name: Wayfinder
+  description: Posts incident notifications from Wayfinder workflows
+features:
+  bot_user:
+    display_name: Wayfinder
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - chat:write.public
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

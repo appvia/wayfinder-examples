@@ -1,0 +1,50 @@
+# Build, test and publish ${{ .Inputs.serviceName }}.
+#
+# Note for template authors: GitHub Actions expressions use the same delimiters
+# as Wayfinder template expressions. In the skeleton, every Actions expression
+# below is written with a doubled dollar so Wayfinder passes it through
+# unchanged; the values Wayfinder should fill in (the Go version, the service
+# name) are written with a single dollar.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: $${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "${{ .Inputs.goVersion }}"
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build ./cmd/${{ .Inputs.serviceName }}
+
+  publish:
+    needs: test
+    if: $${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: $${{ env.REGISTRY }}
+          username: $${{ github.actor }}
+          password: $${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: |
+            $${{ env.REGISTRY }}/$${{ env.IMAGE_NAME }}:$${{ github.sha }}
+            $${{ env.REGISTRY }}/$${{ env.IMAGE_NAME }}:latest

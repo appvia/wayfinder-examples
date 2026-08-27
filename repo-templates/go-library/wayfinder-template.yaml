@@ -1,0 +1,15 @@
+# The smallest useful template: one input, a handful of files, no deployment.
+# Not everything scaffolded is a deployable service — a library has no
+# Wayfinder.yaml and never gets deployed, but a template still saves the setup.
+name: Go library
+description: A Go module with tests and CI, for shared code rather than a deployable service
+icon: library
+
+inputs:
+  - name: packageName
+    description: Go package name, used for the directory and the package clause.
+    type: string
+    pattern: "^[a-z][a-z0-9]*$"
+
+skeleton:
+  path: skeleton

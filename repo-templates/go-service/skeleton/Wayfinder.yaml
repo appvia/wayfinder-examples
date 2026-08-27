@@ -1,0 +1,19 @@
+apiVersion: v1
+# The stack this repository was created for.
+name: ${{ .Stack.Name }}
+description: ${{ .Inputs.summary | default "A Go HTTP service." }}
+
+components:
+  # Deploys the chart in this repository. Component names are lowercase
+  # alphanumeric with no hyphens.
+  app:
+    type: KubeResource
+    helm:
+      # A chart held in this repository — no publish step needed.
+      chartPath: ./charts/app
+      chartName: app
+      valuesTemplate: |
+        # ${image} is resolved by wf up from your shell or CI environment.
+        image: ${image}
+        replicaCount: ${{ .Inputs.replicas }}
+        port: ${{ .Inputs.port }}

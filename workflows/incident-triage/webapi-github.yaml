@@ -1,0 +1,75 @@
+# Outbound connection to the GitHub REST API, so the incident-triage workflow can
+# open an issue when the agent judges an incident serious enough to need one.
+#
+# It authenticates with the same GitHub App installation the agent's read-only MCP
+# uses, so this example stores no GitHub credential at all — nothing to mint, hold
+# or rotate. Wayfinder mints a short-lived installation token per invocation.
+#
+# A WebAPI is a reusable connection plus a set of templated operations. The
+# workflow reaches an operation by the action path
+# "<integration>/webapi/<webapi>/<operation>" — here
+# "incident-tools/webapi/github/create-issue". Each call records a
+# WebAPIInvocation, whose response body the workflow reads as
+# `.Tasks.<task>.output.*` — which is how the Slack task below gets the new
+# issue's html_url without any extra configuration.
+#
+# Note the body templating: values are injected with `| toJson`, NOT wrapped in
+# quotes. The issue body is agent-authored markdown containing real newlines and
+# quote characters, and toJson emits a correctly-escaped JSON string. Writing
+# "${{ .Inputs.body }}" instead would produce invalid JSON the moment the agent
+# used a second line.
+apiVersion: integrations/v3
+kind: WebAPI
+metadata:
+  name: github
+spec:
+  integrationRef: incident-tools
+  description: GitHub REST API — open an issue for an incident that needs human attention.
+  enabled: true
+
+  connection:
+    baseURL: https://api.github.com
+    headers:
+      Accept: application/vnd.github+json
+      X-GitHub-Api-Version: "2022-11-28"
+      # Reads from .Auth, so the token is redacted in the invocation record.
+      Authorization: Bearer ${{ .Auth.token }}
+    auth:
+      # No stored credential: Wayfinder mints a fresh GitHub App installation
+      # token for each invocation using this GitHubOrg's installation, and
+      # exposes it to the templates above as ${{ .Auth.token }} — the same way a
+      # PlatformSecret field named "token" would be. Keep the ref in step with
+      # agents/githuborg.yaml, which the agent's read-only MCP also uses.
+      githubOrgRef: REPLACE-GITHUB-ORG
+
+  operations:
+    - name: create-issue
+      summary: Open an issue in a repository
+      method: POST
+      path: /repos/${{ .Inputs.owner }}/${{ .Inputs.repo }}/issues
+      inputs:
+        - name: owner
+          description: Repository owner (organisation or user)
+          type: string
+        - name: repo
+          description: Repository name
+          type: string
+        - name: title
+          description: Issue title
+          type: string
+        - name: body
+          description: Issue body (markdown)
+          type: string
+          optional: true
+        - name: labels
+          description: Comma-separated issue labels
+          type: string
+          optional: true
+      body: |
+        {
+          "title": ${{ .Inputs.title | toJson }},
+          "body": ${{ .Inputs.body | default "" | toJson }},
+          "labels": ${{ .Inputs.labels | default "" | splitList "," | compact | toJson }}
+        }
+      response:
+        successCondition: ".statusCode == 201"

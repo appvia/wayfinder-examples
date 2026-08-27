@@ -1,0 +1,86 @@
+# A tenant DataType describing the structured findings the incident-investigator
+# agent produces. Its spec.schema is a JSON Schema (draft-07 style) that types
+# the "findings" field of the agent's submit_result tool: the agent's payload is
+# validated against this schema server-side at submit time, so a downstream
+# workflow step consumes findings of a known, stable shape rather than free text.
+#
+# Referenced by incident-investigator.yaml via spec.resultSchema.dataType. Apply
+# it before (or alongside) the agent — `wf apply -f workflows/incident-triage/`.
+#
+# The "severity" field is what the incident-triage workflow branches on: because
+# the schema is enforced at submit time, a workflow task can gate on
+# `.Tasks.<task>.output.findings.severity` and trust the value is one of the four
+# below and nothing else.
+apiVersion: org/v3
+kind: DataType
+metadata:
+  name: IncidentFindings
+spec:
+  description: Structured output of an incident investigation — diagnosis, evidence and recommended remediation.
+  schema:
+    type: object
+    additionalProperties: false
+    required: [whatHappened, rootCause, severity, confidence, evidence]
+    properties:
+      whatHappened:
+        type: string
+        description: Plain-language account of what went wrong.
+      rootCause:
+        type: string
+        description: Best hypothesis for the underlying cause.
+      severity:
+        type: string
+        description: >-
+          The investigator's own judgement of how serious the incident is, based on
+          observed impact rather than the severity the alert declared.
+        enum: [critical, high, medium, low]
+      confidence:
+        type: string
+        description: Honest confidence in the stated root cause.
+        enum: [high, medium, low]
+      evidence:
+        type: array
+        description: The signals that support the diagnosis; each must let a human verify the step.
+        minItems: 1
+        items:
+          type: object
+          required: [signal, source]
+          properties:
+            signal:
+              type: string
+              description: What was observed (e.g. an error rate spike, a failing trace span).
+            source:
+              type: string
+              description: Where a human can verify it — alert name, trace ID, log query, commit SHA or resource name.
+            detail:
+              type: string
+              description: Optional supporting detail or interpretation.
+      affectedResources:
+        type: array
+        description: Wayfinder resources implicated in the incident.
+        items:
+          type: object
+          required: [kind, name]
+          properties:
+            kind:
+              type: string
+              description: Resource kind (e.g. StackInstance, CloudResource, Cluster).
+            name:
+              type: string
+              description: Resource name.
+            workspace:
+              type: string
+              description: Workspace the resource lives in, if applicable.
+            environment:
+              type: string
+              description: Environment the resource lives in, if applicable.
+      remediation:
+        type: array
+        description: Recommended actions for a human to carry out, immediate mitigation first.
+        items:
+          type: string
+      openQuestions:
+        type: array
+        description: Anything that could not be determined and the access or information that would resolve it.
+        items:
+          type: string

@@ -1,0 +1,31 @@
+# The inbound endpoint SigNoz delivers alerts to. Every delivery records a
+# WebhookInvocation, and it is that invocation's ProcessingCompleted event the
+# incident-triage workflow triggers on.
+#
+# WORKSPACE-SCOPED, deliberately: the WorkflowInvocation engine runs at workspace
+# scope, so a workspace webhook mints a workspace invocation that a workspace
+# workflow can react to. A tenant-scoped webhook would mint a tenant-scoped run
+# the engine cannot yet drive. Set the same workspace here as on workflow.yaml.
+#
+# Security posture: SigNoz does not sign webhook bodies, so this endpoint relies
+# on the secrecy of its ingest URL (algorithm: none). Treat the URL as a
+# credential — share it only with SigNoz, and rotate it if it leaks. Get the URL
+# with `wf rotate webhook signoz-alerts -w <workspace>`; rotating invalidates the
+# previous URL immediately.
+#
+# This webhook stores nothing on your resources: it exists to carry the alert into
+# a workflow run, which reads the payload from `.Resource.delivery.body`. To also
+# land each alert on the StackInstance it fired on, add a `storage:` block keyed on
+# the alert's service.name / deployment.environment labels — see the shipped SigNoz
+# integration definition for a worked mapping.
+apiVersion: integrations/v3
+kind: Webhook
+metadata:
+  name: signoz-alerts
+  workspace: my-team
+spec:
+  integrationRef: incident-tools
+  description: SigNoz alert deliveries — each one fires the incident-triage workflow.
+  enabled: true
+  security:
+    algorithm: none
