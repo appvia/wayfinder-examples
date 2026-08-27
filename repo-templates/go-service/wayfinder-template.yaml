@@ -1,0 +1,50 @@
+name: Go microservice
+description: A Go HTTP service with its own Helm chart, a CI pipeline and a deployable Wayfinder.yaml
+icon: go
+
+inputs:
+  - name: serviceName
+    description: Name of the service. Used for the module, the binary, the chart release and the deployed component.
+    type: string
+    pattern: "^[a-z][a-z0-9]{1,19}$"
+    minLength: 2
+    maxLength: 20
+
+  - name: summary
+    description: One line describing what this service does. Appears in the README and the stack description.
+    type: string
+    optional: true
+
+  # An input with a defaultValue must also be optional: a required input has to
+  # be supplied by the caller, and its default is never reached.
+  - name: goVersion
+    description: Go version the service builds against.
+    type: string
+    optional: true
+    defaultValue: "1.25"
+    enum: ["1.24", "1.25"]
+
+  - name: port
+    description: Port the service listens on.
+    type: number
+    optional: true
+    defaultValue: 8080
+    minimum: 1024
+    maximum: 65535
+
+  - name: replicas
+    description: Replicas to deploy.
+    type: number
+    optional: true
+    defaultValue: 2
+    minimum: 1
+    maximum: 10
+
+  - name: includeDocs
+    description: Include a docs/ directory with an architecture note to fill in.
+    type: bool
+    optional: true
+    defaultValue: false
+
+skeleton:
+  path: skeleton

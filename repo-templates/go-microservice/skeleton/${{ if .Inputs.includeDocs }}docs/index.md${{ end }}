@@ -1,0 +1,6 @@
+# ${{ .Inputs.serviceName }} docs
+
+Documentation for the **${{ .Inputs.serviceName }}** service in stack `${{ .Stack.Name }}`.
+
+This whole file is only generated when the `includeDocs` input is `true` — the
+skeleton path renders to an empty string otherwise, so the file is skipped.

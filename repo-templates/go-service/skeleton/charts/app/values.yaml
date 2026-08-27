@@ -1,0 +1,4 @@
+# Set by Wayfinder.yaml's valuesTemplate at deploy time.
+image: ""
+replicaCount: 1
+port: ${{ .Inputs.port }}

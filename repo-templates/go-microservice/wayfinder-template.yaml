@@ -1,0 +1,28 @@
+name: Go microservice
+description: >-
+  A minimal Go microservice scaffolded with a Wayfinder stack manifest, a
+  templated command package and a CI workflow. Used to exercise the Wayfinder
+  RepoTemplate scaffolding flow.
+inputs:
+  - name: serviceName
+    description: Name of the service (used for the module, binary and package directory)
+    type: string
+    pattern: "^[a-z][a-z0-9-]*$"
+    minLength: 2
+    maxLength: 40
+  - name: description
+    description: Short description of what the service does
+    type: string
+    optional: true
+    defaultValue: "A Go microservice scaffolded by Wayfinder"
+  - name: includeDocs
+    description: Include a docs/ directory in the generated repository
+    type: bool
+    optional: true
+    defaultValue: false
+skeleton:
+  path: skeleton
+  # The CI workflow uses GitHub Actions' native ${{ }} expressions, so its
+  # contents must pass through unrendered. Paths are still templated.
+  raw:
+    - ".github/workflows/*.yaml"

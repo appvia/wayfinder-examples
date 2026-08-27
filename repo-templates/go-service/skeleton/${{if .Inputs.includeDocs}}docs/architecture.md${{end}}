@@ -1,0 +1,20 @@
+# ${{ .Inputs.serviceName }} — architecture
+
+> Included because `includeDocs` was set when this repository was created.
+> Delete it if you do not want it.
+
+## What this service does
+
+${{ .Inputs.summary | default "TODO: describe the service." }}
+
+## How it is deployed
+
+`Wayfinder.yaml` deploys the chart in `charts/app` as the `app` component. It
+runs ${{ .Inputs.replicas }} replica(s) listening on port ${{ .Inputs.port }}.
+
+## Dependencies
+
+TODO: list the resources this service consumes — databases, buckets, queues —
+and add them to `Wayfinder.yaml` as components so Wayfinder provisions them and
+grants access. See
+[deploying plans with your app](https://on.wayfinder.run/docs/for-app-teams/04-deploying-plans-with-your-app).
