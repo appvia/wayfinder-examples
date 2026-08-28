@@ -1,0 +1,10 @@
+.git
+.github
+.wayfinder
+bin
+charts
+plans
+coverage.out
+Wayfinder.yaml
+wayfinder-stack.yaml
+README.md

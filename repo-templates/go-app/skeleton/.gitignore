@@ -1,0 +1,5 @@
+bin/
+coverage.out
+
+# Written by `wf up` to remember the stack instance you last deployed to.
+.wfup

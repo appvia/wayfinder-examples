@@ -1,0 +1,145 @@
+# Wayfinder repo template definition.
+#
+# Parsed strictly: an unrecognised key here is an error, not a warning.
+# Everything under skeleton/ is what gets written into the new repository.
+name: Python FastAPI service
+description: >-
+  A Python HTTP service on FastAPI, managed with uv, deployed by a Wayfinder
+  stack that runs the app on Kubernetes alongside an S3 bucket it reaches
+  through workload identity. Ships the standard Wayfinder CI set: pull request
+  previews, deploy to develop on merge, and deploy to production on a tag.
+icon: python
+
+inputs:
+  # The only required input. Everything else has a default so the template can
+  # be scaffolded from the catalogue, or from CI with --no-input, by supplying
+  # nothing but a name.
+  - name: serviceName
+    description: >-
+      Name of the service. Used for the Go command package, the container image,
+      the Helm release and the develop and production stack instance names.
+    type: string
+    minLength: 2
+    maxLength: 40
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  - name: description
+    description: One line describing what this service does.
+    type: string
+    optional: true
+    defaultValue: "A Python FastAPI service scaffolded by Wayfinder"
+    maxLength: 200
+
+  - name: owner
+    description: Team that owns this service. Written into the README and CODEOWNERS.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 60
+
+  # The scaffold context has no workspace, so CI needs to be told which one to
+  # deploy into. Leave blank to fall back to the WF_WORKSPACE GitHub variable,
+  # which is the better choice when one workspace serves many repositories.
+  - name: workspace
+    description: >-
+      Wayfinder workspace CI deploys into. Leave blank to take it from the
+      WF_WORKSPACE GitHub repository or organisation variable instead.
+    type: string
+    optional: true
+    defaultValue: ""
+    pattern: "^([a-z][a-z0-9-]*[a-z0-9])?$"
+
+  - name: developEnvironment
+    description: Environment deployed to on every merge to the default branch.
+    type: string
+    optional: true
+    defaultValue: "dev"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: prodEnvironment
+    description: Environment deployed to when a release tag is pushed.
+    type: string
+    optional: true
+    defaultValue: "prod"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: previewEnvironment
+    description: Environment pull request preview instances are created in.
+    type: string
+    optional: true
+    defaultValue: "dev"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: registry
+    description: Container registry the service image is published to.
+    type: string
+    optional: true
+    defaultValue: "ghcr.io"
+    enum: ["ghcr.io", "quay.io", "docker.io"]
+
+  - name: port
+    description: TCP port the service listens on.
+    type: number
+    optional: true
+    defaultValue: 8080
+    minimum: 1
+    maximum: 65535
+
+  - name: includeStorage
+    description: >-
+      Provision an S3 bucket alongside the service and grant the workload
+      read-write access to it through workload identity.
+    type: bool
+    optional: true
+    defaultValue: true
+
+  - name: storagePlan
+    description: >-
+      CloudResourcePlan backing the storage component. Defaults to the plan
+      bundled in the generated repository, so the stack deploys with no
+      catalogue prerequisite. Set it to a catalogue reference such as
+      aws-s3-data-bucket@1.0.0 to use your platform team's plan instead.
+    type: string
+    optional: true
+    defaultValue: "file:plans/aws-s3-data-bucket.yaml"
+
+  # Exposing the service needs a Gateway that already exists in the target
+  # environment, which only the platform team knows. With no gateway named, the
+  # service still deploys but is reachable only inside the cluster.
+  - name: gatewayName
+    description: >-
+      Name of an existing Gateway API Gateway to publish the service through.
+      Leave blank to deploy without an HTTPRoute, reachable in-cluster only.
+    type: string
+    optional: true
+    defaultValue: ""
+
+  - name: gatewayNamespace
+    description: >-
+      Namespace of the Gateway named in gatewayName. Leave blank when the
+      Gateway is in the same namespace as the service.
+    type: string
+    optional: true
+    defaultValue: ""
+
+skeleton:
+  path: skeleton
+
+  # Files listed here are copied byte for byte. Their contents are NOT rendered,
+  # so they must not use the `$${{ }}` escape either — it would land literally.
+  #
+  # Note that these globs are matched with path.Match: `**` is not supported, and
+  # `*.yaml` does not match `*.yml`, which is why both are listed.
+  raw:
+    # GitHub Actions has its own ${{ }} expression syntax. Keeping the workflows
+    # raw means they are valid Actions YAML exactly as written, both here and in
+    # the generated repository. Per-repository values reach them through
+    # .wayfinder/ci.env, which is rendered.
+    - ".github/workflows/*.yaml"
+    - ".github/workflows/*.yml"
+    - ".wayfinder/*.sh"
+    # Helm charts are Helm templating, evaluated at deploy time, not now.
+    - "charts/app/*"
+    - "charts/app/templates/*"
+    # CloudResourcePlans use the Wayfinder stack template engine, not this one.
+    - "plans/*.yaml"
