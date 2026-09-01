@@ -84,8 +84,23 @@ jobs:
       - name: Lint and render every chart
         run: |
           set -euo pipefail
-          for chart in repo-templates/*/skeleton/charts/app; do
-            echo "==> ${chart}"
+          pip install --quiet pyyaml
+          # Charts are linted AFTER rendering, not as they sit in the skeleton.
+          # A template that renders its chart (rather than exempting it with a
+          # raw glob) is full of scaffold expressions until it is scaffolded, so
+          # linting the skeleton would fail on a chart that is perfectly good.
+          for template in repo-templates/*/; do
+            name="$(basename "${template}")"
+            case "${name}" in _*|hack) continue ;; esac
+            chart="${RUNNER_TEMP}/${name}/charts/app"
+
+            repo-templates/hack/render-for-build.sh "${template}" "${RUNNER_TEMP}/${name}" >/dev/null
+            if [[ ! -d "${chart}" ]]; then
+              echo "==> ${name}: no chart, skipping"
+              continue
+            fi
+
+            echo "==> ${name}"
             helm lint "${chart}" --set image=ghcr.io/example/example:ci
             # Both shapes the stack actually deploys: in-cluster only, and
             # published through a Gateway with workload identity attached.
