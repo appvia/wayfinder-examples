@@ -7,7 +7,7 @@ RELEASE ?= dev
 APP := src/Service
 TESTS := tests/Service.Tests
 
-DOTNET := dotnet --nologo
+DOTNET := dotnet
 
 .PHONY: all
 all: lint test
@@ -28,13 +28,13 @@ ci-setup:
 
 .PHONY: test
 test:
-	$(DOTNET) test $(TESTS)
+	$(DOTNET) test $(TESTS) --nologo
 
 # TreatWarningsAsErrors is set in both csproj files, so a warning fails this.
 # `format --verify-no-changes` is the formatting half.
 .PHONY: lint
 lint:
-	$(DOTNET) build $(APP) --configuration Release
+	$(DOTNET) build $(APP) --configuration Release --nologo
 	$(DOTNET) format $(APP) --verify-no-changes
 	$(DOTNET) format $(TESTS) --verify-no-changes
 
@@ -45,7 +45,7 @@ format:
 
 .PHONY: build
 build:
-	$(DOTNET) publish $(APP) --configuration Release -o ./publish
+	$(DOTNET) publish $(APP) --configuration Release --nologo -o ./publish
 
 .PHONY: run
 run:
