@@ -1,0 +1,201 @@
+# Pull request checks.
+#
+# Tests the code, builds a container image, validates the stack against
+# Wayfinder without applying anything, then deploys a throwaway preview
+# instance and comments its URL on the pull request. The preview is destroyed
+# by wf-preview-teardown.yaml when the pull request closes.
+#
+# This file is copied into your repository verbatim — Wayfinder does not
+# template it, so you can edit it like any other workflow. Values that differ
+# per repository live in .wayfinder/ci.env; values that differ per Wayfinder
+# installation are GitHub repository or organisation variables. Add new values
+# to one of those, not to this file.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  id-token: write # lets GitHub mint the OIDC token Wayfinder authenticates with
+
+# Runs for one pull request are serialised rather than cancelled: a cancelled
+# `wf deploy` can leave a half-applied stack and orphaned cloud resources.
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Each template implements ci-setup for whatever its language needs —
+      # nothing, or installing a tool the runner does not ship. It is what keeps
+      # this workflow identical across every Wayfinder service template.
+      - name: Set up the toolchain
+        run: make ci-setup
+
+      - name: Test
+        run: make test
+
+      - name: Lint
+        run: make lint
+
+  build:
+    name: Build image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Load repository configuration
+        # $GITHUB_ENV accepts KEY=value lines only, so comments are filtered out.
+        run: grep -E '^[A-Z][A-Z0-9_]*=' .wayfinder/ci.env >> "$GITHUB_ENV"
+
+      - name: Compute the image reference
+        id: meta
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          echo "image=${WF_IMAGE_REPO}:pr-${PR_NUMBER}-${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.WF_IMAGE_REGISTRY }}
+          # GITHUB_TOKEN covers ghcr.io. For any other registry, set the
+          # REGISTRY_USERNAME variable and REGISTRY_PASSWORD secret.
+          username: ${{ vars.REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  validate:
+    name: Validate stack
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ vars.WF_TOOLBOX_IMAGE || 'quay.io/appvia-wayfinder/wftoolbox:latest' }}
+    env:
+      WAYFINDER_SERVER: ${{ vars.WF_SERVER }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve the Wayfinder context
+        run: .wayfinder/ci-env.sh preview
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          WF_WORKSPACE_VAR: ${{ vars.WF_WORKSPACE }}
+          WF_HOST_CLUSTER: ${{ vars.WF_HOST_CLUSTER }}
+          WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+          WF_REGION: ${{ vars.WF_REGION }}
+          WF_DNS_ZONE: ${{ vars.WF_DNS_ZONE }}
+
+      # Plans the deployment server-side and applies none of it. Note that when
+      # Wayfinder.yaml refers to a plan as `file:plans/...`, that plan IS
+      # published to the workspace catalogue even on a dry run, so the service
+      # account needs catalogue write as well as deploy rights.
+      - name: Validate the stack
+        run: |
+          set -euo pipefail
+          mapfile -t args < "${WF_DEPLOY_ARGS_FILE}"
+          wf deploy --dry-run --non-interactive \
+            -i "${WF_INSTANCE}" \
+            -e "${WAYFINDER_ENVIRONMENT}" \
+            -f Wayfinder.yaml \
+            --env-var IMAGE="${WF_IMAGE_REPO}:validate" \
+            --env-var RELEASE="pr-${{ github.event.pull_request.number }}" \
+            "${args[@]}"
+
+  preview:
+    name: Preview environment
+    needs: [test, build, validate]
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ vars.WF_TOOLBOX_IMAGE || 'quay.io/appvia-wayfinder/wftoolbox:latest' }}
+    env:
+      WAYFINDER_SERVER: ${{ vars.WF_SERVER }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve the Wayfinder context
+        run: .wayfinder/ci-env.sh preview
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          WF_WORKSPACE_VAR: ${{ vars.WF_WORKSPACE }}
+          WF_HOST_CLUSTER: ${{ vars.WF_HOST_CLUSTER }}
+          WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+          WF_REGION: ${{ vars.WF_REGION }}
+          WF_DNS_ZONE: ${{ vars.WF_DNS_ZONE }}
+
+      - name: Deploy the preview instance
+        id: deploy
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+        run: |
+          set -euo pipefail
+          mapfile -t args < "${WF_DEPLOY_ARGS_FILE}"
+          wf deploy --non-interactive --timeout 20m \
+            -i "${WF_INSTANCE}" \
+            -e "${WAYFINDER_ENVIRONMENT}" \
+            -f Wayfinder.yaml \
+            --env-var IMAGE="${IMAGE}" \
+            --env-var RELEASE="pr-${{ github.event.pull_request.number }}" \
+            --label "preview:pr-${{ github.event.pull_request.number }}" \
+            --out-file ./preview.json \
+            "${args[@]}"
+          echo "url=$(jq -r '.componentOutputs.app.url.value // empty' ./preview.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Comment the preview URL on the pull request
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          PREVIEW_INSTANCE: ${{ env.WF_INSTANCE }}
+          PREVIEW_ENVIRONMENT: ${{ env.WAYFINDER_ENVIRONMENT }}
+        with:
+          script: |
+            const info = {
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            }
+            const marker = '<!-- wayfinder-preview -->'
+            const url = process.env.PREVIEW_URL
+            const headline = url
+              ? `**${url}**`
+              : '_Deployed, but the stack published no `url` output._'
+            const body = [
+              marker,
+              '### Wayfinder preview environment',
+              '',
+              headline,
+              '',
+              `<sub>Instance \`${process.env.PREVIEW_INSTANCE}\` in environment ` +
+                `\`${process.env.PREVIEW_ENVIRONMENT}\` · commit ${context.sha.substring(0, 7)} · ` +
+                'destroyed automatically when this pull request closes.</sub>',
+            ].join('\n')
+
+            for (const comment of (await github.rest.issues.listComments(info)).data) {
+              if (comment.user.type === 'Bot' && comment.body.includes(marker)) {
+                await github.rest.issues.updateComment({ ...info, comment_id: comment.id, body })
+                return
+              }
+            }
+            await github.rest.issues.createComment({ ...info, body })

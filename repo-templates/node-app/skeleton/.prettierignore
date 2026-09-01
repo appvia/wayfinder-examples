@@ -1,0 +1,17 @@
+# Helm charts and CloudResourcePlans are templates, not YAML documents —
+# formatting them corrupts the Go template syntax inside.
+charts/
+plans/
+Wayfinder.yaml
+
+# Copied verbatim from the Wayfinder repo template; leave them as they came.
+.github/
+.wayfinder/
+
+node_modules/
+package-lock.json
+
+# Markdown came from the repo template with values substituted into it, so
+# table column widths depend on the name you scaffolded with and can never
+# match a fixed alignment. Format prose by hand.
+*.md

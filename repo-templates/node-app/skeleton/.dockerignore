@@ -1,0 +1,9 @@
+.git
+.github
+.wayfinder
+node_modules
+charts
+plans
+Wayfinder.yaml
+wayfinder-stack.yaml
+README.md

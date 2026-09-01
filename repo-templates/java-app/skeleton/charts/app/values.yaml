@@ -1,0 +1,42 @@
+# Defaults for a standalone `helm template`. In a real deployment every value
+# here is overwritten by the valuesTemplate in Wayfinder.yaml, which is where
+# the image tag, the workload identity annotations and the storage outputs come
+# from. Edit Wayfinder.yaml, not this file, unless you are adding a new value.
+
+# Container image reference. CI supplies this as ${IMAGE} at deploy time.
+image: ""
+
+# The release this is: a git tag, or sha-<short sha>.
+release: dev
+
+port: 8080
+replicas: 1
+
+serviceAccount:
+  name: app
+  # Wayfinder writes the cloud workload identity annotations here. That is what
+  # lets the pod reach its cloud resources with no credentials in the cluster.
+  annotations: {}
+
+# Environment variables for the container, as a plain name/value map.
+env: {}
+
+httpRoute:
+  enabled: false
+  hostname: ""
+  parentGateway:
+    name: ""
+    # Leave blank when the Gateway is in this service's own namespace.
+    namespace: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

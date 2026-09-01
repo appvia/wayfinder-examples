@@ -1,4 +1,4 @@
-name: Go microservice
+name: Go service with Helm chart
 description: A Go HTTP service with its own Helm chart, a CI pipeline and a deployable Wayfinder.yaml
 icon: go
 

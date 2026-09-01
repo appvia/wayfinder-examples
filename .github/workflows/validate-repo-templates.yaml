@@ -1,0 +1,114 @@
+# Checks the repo templates under repo-templates/.
+#
+# Everything here is self-contained: no Wayfinder server, no credentials, no
+# cloud. The full render, using Wayfinder's own template engine, runs in the
+# wayfinder repository against a clone of this one.
+name: Validate repo templates
+
+on:
+  pull_request:
+    paths: ["repo-templates/**", ".github/workflows/validate-repo-templates.yaml"]
+  push:
+    branches: [main]
+    paths: ["repo-templates/**", ".github/workflows/validate-repo-templates.yaml"]
+
+permissions:
+  contents: read
+
+jobs:
+  structure:
+    name: Structure and glob coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check template structure
+        run: |
+          pip install --quiet pyyaml
+          python3 repo-templates/hack/check-templates.py
+
+      # The workflows are raw, so they are valid Actions YAML exactly as they
+      # sit on disk. Linting the canonical copy is enough: the check above
+      # proves every template's copy is byte-identical to it.
+      - name: Lint the shared workflows
+        uses: raven-actions/actionlint@v2
+        with:
+          files: "repo-templates/_shared/workflows/*.yaml"
+
+      - name: Shellcheck
+        run: |
+          shellcheck repo-templates/hack/*.sh \
+                     repo-templates/*.sh \
+                     repo-templates/*/skeleton/.wayfinder/*.sh
+
+  build:
+    name: Build ${{ matrix.template }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        template: [go-app, python-app, node-app, java-app, dotnet-app]
+    steps:
+      - uses: actions/checkout@v6
+
+      # Substitutes placeholder values so the skeleton is a real project the
+      # language toolchain will accept. A template that does not compile, or
+      # whose own tests fail, cannot merge.
+      - name: Render the skeleton
+        run: repo-templates/hack/render-for-build.sh "repo-templates/${{ matrix.template }}" "${RUNNER_TEMP}/build"
+
+      - name: Set up the toolchain
+        working-directory: ${{ runner.temp }}/build
+        run: make ci-setup
+
+      - name: Lint
+        working-directory: ${{ runner.temp }}/build
+        run: make lint
+
+      - name: Test
+        working-directory: ${{ runner.temp }}/build
+        run: make test
+
+      - name: Build the image
+        working-directory: ${{ runner.temp }}/build
+        run: docker build --build-arg VERSION=ci -t "${{ matrix.template }}:ci" .
+
+  chart:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint and render every chart
+        run: |
+          set -euo pipefail
+          pip install --quiet pyyaml
+          # Charts are linted AFTER rendering, not as they sit in the skeleton.
+          # A template that renders its chart (rather than exempting it with a
+          # raw glob) is full of scaffold expressions until it is scaffolded, so
+          # linting the skeleton would fail on a chart that is perfectly good.
+          for template in repo-templates/*/; do
+            name="$(basename "${template}")"
+            case "${name}" in _*|hack) continue ;; esac
+            chart="${RUNNER_TEMP}/${name}/charts/app"
+
+            repo-templates/hack/render-for-build.sh "${template}" "${RUNNER_TEMP}/${name}" >/dev/null
+            if [[ ! -d "${chart}" ]]; then
+              echo "==> ${name}: no chart, skipping"
+              continue
+            fi
+
+            echo "==> ${name}"
+            helm lint "${chart}" --set image=ghcr.io/example/example:ci
+            # Both shapes the stack actually deploys: in-cluster only, and
+            # published through a Gateway with workload identity attached.
+            helm template rel "${chart}" --set image=ghcr.io/example/example:ci >/dev/null
+            helm template rel "${chart}" \
+              --set image=ghcr.io/example/example:ci \
+              --set httpRoute.enabled=true \
+              --set httpRoute.hostname=example.test \
+              --set httpRoute.parentGateway.name=shared \
+              --set env.BUCKET_NAME=example-bucket >/dev/null
+          done

@@ -1,0 +1,12 @@
+.git
+.github
+.wayfinder
+**/bin
+**/obj
+publish
+tests
+charts
+plans
+Wayfinder.yaml
+wayfinder-stack.yaml
+README.md

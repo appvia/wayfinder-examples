@@ -1,0 +1,27 @@
+server:
+  port: ${PORT:${{ .Inputs.port }}}
+  shutdown: graceful
+
+spring:
+  application:
+    name: ${{ .Inputs.serviceName }}
+  lifecycle:
+    # Give in-flight requests a chance to finish when Kubernetes sends SIGTERM,
+    # rather than severing them mid-roll.
+    timeout-per-shutdown-phase: 20s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Health and info only. Exposing everything puts env, mappings and
+        # thread dumps on the network, which is rarely what you want in a
+        # cluster.
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      # Per-dependency detail is useful to an operator reading the endpoint
+      # directly; the chart's probes use /healthz and /readyz and do not need it.
+      show-details: when-authorized

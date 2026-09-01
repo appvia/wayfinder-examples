@@ -1,0 +1,31 @@
+# A Go HTTP service with its own Helm chart and a deployable Wayfinder.yaml.
+#
+# This is the object you give Wayfinder. It is a POINTER: it says which
+# repository, which branch or tag, and which directory inside it. The template
+# itself — its name, inputs and files — is `wayfinder-template.yaml` at that
+# path, which Wayfinder reads once it has followed this. See ../ANATOMY.md.
+#
+#   wf apply -f RepoTemplate-go-service.yaml
+#   wf get repotemplate go-service -o yaml      # check status.manifest synced
+#   wf create stack demo --from-template go-service --dry-run
+#
+apiVersion: sourcecontrol/v3
+kind: RepoTemplate
+metadata:
+  name: go-service
+  # Free-form axes for filtering the catalogue. Classification is spec.category.
+  labels:
+    language: go
+    framework: net-http
+    family: wayfinder-example
+spec:
+  # Public repository, so Wayfinder clones it anonymously — registering needs no
+  # GitHub connection. Creating a repository from it does.
+  url: https://github.com/appvia/wayfinder-examples.git
+  # The directory holding wayfinder-template.yaml. One repository can host many
+  # templates, each registered separately.
+  path: repo-templates/go-service
+  # Branch or tag to read. Pin this to a tag to hold the template steady.
+  ref: main
+  displayName: Go service with Helm chart
+  category: service

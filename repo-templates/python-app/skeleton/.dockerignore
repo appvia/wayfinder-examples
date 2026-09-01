@@ -1,0 +1,14 @@
+.git
+.github
+.wayfinder
+.venv
+charts
+plans
+dist
+tests
+.pytest_cache
+.ruff_cache
+__pycache__
+Wayfinder.yaml
+wayfinder-stack.yaml
+README.md

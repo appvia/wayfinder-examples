@@ -1,0 +1,30 @@
+# Registers the Java Spring Boot service template with Wayfinder.
+#
+# This repository is public, so Wayfinder reads the template anonymously — no
+# GitHub connection is needed to register it or to preview what it renders.
+# Creating a repository from it does need a connected GitHub organisation.
+#
+#   wf apply -f RepoTemplate-java-app.yaml
+#   wf get repotemplate java-app -o yaml     # check status.manifest synced
+#   wf create stack payments --from-template java-app --input serviceName=payments --dry-run
+#
+apiVersion: sourcecontrol/v3
+kind: RepoTemplate
+metadata:
+  name: java-app
+  # Free-form axes for filtering the catalogue. Classification is spec.category.
+  labels:
+    language: java
+    framework: spring-boot
+    family: wayfinder-golden-path
+spec:
+  url: https://github.com/appvia/wayfinder-examples.git
+  # The directory holding wayfinder-template.yaml. One repository can host many
+  # templates, each registered separately.
+  path: repo-templates/java-app
+  # Branch or tag to read. Pin this to a tag to hold the template steady —
+  # tracking a branch means every merge changes the template for everyone on the
+  # next resync. Point it at a branch to try a change before merging it.
+  ref: main
+  displayName: Java Spring Boot service
+  category: service
