@@ -4,6 +4,10 @@ A Java service on Spring Boot, built with Maven on Java 21, with a Wayfinder
 stack that runs it on Kubernetes alongside an S3 bucket it reaches through
 workload identity.
 
+`RepoTemplate-java-app.yaml` is the object you give Wayfinder — a pointer at this
+directory. `wayfinder-template.yaml` is the template itself, which Wayfinder
+reads once it has followed that pointer. See [../ANATOMY.md](../ANATOMY.md).
+
 This directory is the template definition. It is not itself a Java project — the
 project lives under `skeleton/`, and only that is written into a new repository.
 

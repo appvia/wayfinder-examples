@@ -78,13 +78,19 @@ $ wf create stack payments --from-template go-app --input serviceName=payments \
 
 ```
 go-app/
-├── RepoTemplate-go-app.yaml   registers it with Wayfinder
-├── wayfinder-template.yaml    the template's name, description and inputs
-└── skeleton/                  the files that get copied, rendered with the inputs
+├── RepoTemplate-go-app.yaml   you give this to Wayfinder — a pointer
+├── wayfinder-template.yaml    Wayfinder reads this from the repository
+└── skeleton/                  the files that get copied into the new repository
 ```
 
-`wayfinder-template.yaml` is the definition, and it lives here rather than in
-Wayfinder — so the inputs and the files they fill in are versioned together.
+Two YAML files with similar names doing completely different jobs.
+**[ANATOMY.md](./ANATOMY.md) explains which is which**, and is the thing to read
+first if you have not worked with these before.
+
+The short version: the `RepoTemplate` says *where the template is*, the
+`wayfinder-template.yaml` at that path says *what the template is*. The manifest
+carries no repository path deliberately, so the same file works read from a
+branch, a tag or a fork.
 
 Registration points at the **directory** holding the manifest (`spec.path`),
 which is why one repository can hold all of these templates.

@@ -3,7 +3,13 @@
 The worked example the Wayfinder documentation walks through file by file in
 [Example Template Repository](https://on.wayfinder.run/docs/repo-templates/04-example-template-repository).
 
-Register it with `--path repo-templates/go-microservice`:
+Register it:
+
+```bash
+wf apply -f repo-templates/go-microservice/RepoTemplate-go-microservice.yaml
+```
+
+or imperatively, which does the same thing:
 
 ```bash
 wf create repotemplate go-microservice \
@@ -12,8 +18,10 @@ wf create repotemplate go-microservice \
   --category service --label language:go
 ```
 
-This file and `wayfinder-template.yaml` are **not** scaffolded — only
-`skeleton/` is.
+`RepoTemplate-go-microservice.yaml` is the object you give Wayfinder — a pointer
+at this directory. `wayfinder-template.yaml` is the template itself, which
+Wayfinder reads once it has followed that pointer. Neither is scaffolded; only
+`skeleton/` is. See [../ANATOMY.md](../ANATOMY.md).
 
 ## Inputs
 
