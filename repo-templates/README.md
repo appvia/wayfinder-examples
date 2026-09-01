@@ -18,6 +18,8 @@ production on a tag.
 | [`go-app/`](./go-app) | Go | `net/http` service, distroless static image |
 | [`python-app/`](./python-app) | Python | FastAPI on uv, venv on `python:3.13-slim` |
 | [`node-app/`](./node-app) | TypeScript | Fastify on `node:22-slim` |
+| [`java-app/`](./java-app) | Java | Spring Boot on Maven, `eclipse-temurin:21-jre` |
+| [`dotnet-app/`](./dotnet-app) | C# | ASP.NET Core minimal APIs, `aspnet:10.0-noble-chiseled` |
 
 They share one CI contract, one set of inputs and one stack shape, so moving
 between them is only a change of language. The stack is an app workload on

@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        template: [go-app, python-app, node-app]
+        template: [go-app, python-app, node-app, java-app, dotnet-app]
     steps:
       - uses: actions/checkout@v6
 

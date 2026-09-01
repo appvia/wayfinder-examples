@@ -15,7 +15,7 @@ Two groups of checks:
                    respects the fetch limits, and leaves no foreign ${{ }}
                    expression bare in a file Wayfinder will render.
 
-  the pipeline set the go-app / python-app / node-app family, which share one CI
+  the pipeline set the *-app family (go, python, node, java, dotnet), which share one CI
                    contract and one inputs contract. Mark's go-service,
                    go-microservice and go-library deliberately differ from each
                    other — they exist to demonstrate different mechanics — so the
@@ -37,7 +37,7 @@ MAX_FILE_SIZE = 1024 * 1024
 MAX_FILES = 2000
 
 # Templates that share the CI and inputs contract.
-PIPELINE_TEMPLATES = ["go-app", "python-app", "node-app"]
+PIPELINE_TEMPLATES = ["go-app", "python-app", "node-app", "java-app", "dotnet-app"]
 
 # The inputs every template in the pipeline family declares, in this order.
 SHARED_INPUTS = [

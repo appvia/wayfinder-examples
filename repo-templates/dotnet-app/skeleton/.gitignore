@@ -1,0 +1,6 @@
+bin/
+obj/
+publish/
+
+# Written by `wf up` to remember the stack instance you last deployed to.
+.wfup

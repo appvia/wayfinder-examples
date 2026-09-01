@@ -1,0 +1,87 @@
+# The Wayfinder stack for this service: what gets deployed, and what it needs.
+#
+# Two things here are filled in when you deploy, not when you edit:
+#
+#   $${{ ... }}  A Wayfinder stack expression. Component outputs, workload
+#               identity annotations and variables are resolved at deploy time.
+#   ${NAME}     Supplied by CI with `wf deploy --env-var NAME=value`. Every one
+#               must resolve, and an --env-var nothing references is rejected.
+#
+# Deploy it yourself with `wf up -i <instance>`; see `wf deploy --help`.
+apiVersion: v1
+name: ${{ .Stack.Name }}
+description: "${{ .Inputs.description }}"
+
+# Deploy-time settings you can vary per environment without editing this file:
+#   wf set var replicas --value 3 -w <workspace> -e prod
+# Values resolve down the tenant > workspace > environment > instance hierarchy.
+vars:
+  - name: replicas
+    description: Number of pods to run.
+    type: number
+    optional: true
+    defaultValue: 1
+
+components:
+${{- if .Inputs.includeStorage }}
+  # An S3 bucket for this service's data, created per stack instance — every
+  # preview, develop and production deployment gets its own.
+  #
+  # This is a provider component: it publishes consumption policies rather than
+  # credentials. The `app` component below is granted one of them, and Wayfinder
+  # turns that grant into the IAM policy on the workload's own identity. No
+  # access keys exist anywhere in this repository.
+  storage:
+    type: CloudResource
+    plan: ${{ .Inputs.storagePlan }}
+    inputs:
+      - name: suffix
+        value: data
+${{ end }}
+  app:
+    type: KubeResource
+${{- if .Inputs.gatewayName }}
+    outputs:
+      - name: url
+        description: Public URL of the service.
+        valueTemplate: "https://$${{ getDNSEntry }}"
+${{- end }}
+${{- if .Inputs.includeStorage }}
+    workloadIdentity:
+      serviceAccountName: ${{ .Inputs.serviceName }}
+      access:
+        - to: storage
+          consumptionPolicy: read-write
+${{- end }}
+    helm:
+      chartPath: charts/app
+      chartName: app
+      valuesTemplate: |
+        image: "${IMAGE}"
+        release: "${RELEASE}"
+        port: ${{ .Inputs.port }}
+        replicas: $${{ .Vars.replicas }}
+        serviceAccount:
+          name: ${{ .Inputs.serviceName }}
+${{- if .Inputs.includeStorage }}
+          annotations:
+        $${{ .WorkloadIdentity.ServiceAccountAnnotations | toYaml | indent 4 }}
+        env:
+          BUCKET_NAME: "$${{ .Components.storage.s3_bucket_id }}"
+          BUCKET_ARN: "$${{ .Components.storage.s3_bucket_arn }}"
+${{- end }}
+        httpRoute:
+${{- if .Inputs.gatewayName }}
+          enabled: true
+          hostname: "$${{ getDNSEntry }}"
+          parentGateway:
+            name: ${{ .Inputs.gatewayName }}
+${{- if .Inputs.gatewayNamespace }}
+            namespace: ${{ .Inputs.gatewayNamespace }}
+${{- end }}
+${{- else }}
+          # No Gateway was named when this repository was scaffolded, so the
+          # service is reachable inside the cluster only. To publish it, set
+          # httpRoute.enabled and name a Gateway that exists in this environment.
+          enabled: false
+${{- end }}
