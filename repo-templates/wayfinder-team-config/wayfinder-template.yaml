@@ -67,21 +67,6 @@ inputs:
     optional: true
     defaultValue: "eu-west-2"
 
-  - name: costCode
-    description: Cost code a vended account's spend is tagged with.
-    type: string
-    optional: true
-    defaultValue: ""
-    maxLength: 40
-
-  # The vend is the platform team's workflow, not the team's. Both are inputs so
-  # a platform team that names things differently does not have to fork the
-  # template.
-  # Left blank in production: the CLI already defaults to the Wayfinder SaaS API,
-  # so a repository scaffolded against it needs to say nothing. Set it to point a
-  # scaffolded repository at a non-default installation without anyone having to
-  # remember a GitHub variable afterwards — which is the case while an
-  # installation is being tested.
   - name: wayfinderServer
     description: >-
       Wayfinder API URL this repository's CI talks to. Leave blank for the
@@ -91,36 +76,6 @@ inputs:
     optional: true
     defaultValue: ""
     maxLength: 200
-
-  # A vended account's root email is derived from this by subaddressing, so the
-  # domain has to support that (Google Workspace does). It is the PLATFORM team's
-  # mailbox, not the team lead's - the platform team owns the accounts it vends.
-  # Supplied by the onboarding workflow so that scaffolding a repository leaves
-  # nothing for a person to set afterwards.
-  - name: ownerEmail
-    description: >-
-      Mailbox a vended account's root email is derived from, e.g.
-      "cloud-accounts@example.com" gives "cloud-accounts+wf-payments-dev@example.com".
-      Leave blank to take it from the WAYFINDER_OWNER_EMAIL GitHub variable instead,
-      which wins when both are set.
-    type: string
-    optional: true
-    defaultValue: ""
-    maxLength: 200
-
-  - name: platformWorkspace
-    description: Workspace holding the platform team's vending workflow.
-    type: string
-    optional: true
-    defaultValue: "platform"
-    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
-
-  - name: vendWorkflow
-    description: Name of the workflow that vends one cloud account.
-    type: string
-    optional: true
-    defaultValue: "vend-aws-account"
-    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
 
 skeleton:
   path: skeleton
