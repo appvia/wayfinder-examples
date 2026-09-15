@@ -118,8 +118,14 @@ every team repository after it works untouched.
 | --- | --- | --- |
 | `WAYFINDER_OWNER_EMAIL` | **yes**, to vend | The mailbox a vended account's root email is derived from by subaddressing. Its domain must support that (Google Workspace does). The apply job stops with a message naming it if it is unset |
 | `WAYFINDER_SERVER` | only off-SaaS | The Wayfinder API URL. Unset, the CLI uses its own default, which is the Wayfinder SaaS API |
+| `WAYFINDER_TOOLBOX_IMAGE` | only off-SaaS | The image both CI jobs run inside. Unset, they use `quay.io/appvia-wayfinder/wftoolbox:latest` |
 
 `WAYFINDER_SERVER` can also be supplied at scaffold time with the `wayfinderServer`
 input, which is written into `.wayfinder/ci.env`. The GitHub variable wins when
 both are set, so an installation can set it once centrally and the input is there
 for the case where that has not happened yet.
+
+Both CI jobs run **inside the Wayfinder toolbox image**, which already carries `wf`,
+`jq` and `yq`, so neither downloads a tool. Set `WAYFINDER_TOOLBOX_IMAGE` to run
+them on the version your own installation is on — `wf` is then the one that matches
+your server, instead of whichever was newest the morning the job ran.
