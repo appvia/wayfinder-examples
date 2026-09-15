@@ -43,6 +43,17 @@ inputs:
     maxLength: 60
     pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
 
+  # Seeds the one role binding the repository starts with. Everyone else is added by
+  # pull request, so this only has to be the person who takes delivery of the repo.
+  - name: teamLead
+    description: >-
+      Email address of the team lead, bound as a deployer in the first environment.
+      They must have accepted their invite to the tenant before the repository's CI
+      first runs — a binding cannot name a user who does not exist yet.
+    type: string
+    minLength: 3
+    maxLength: 200
+
   - name: firstEnvironment
     description: Name of the one environment the repository starts with.
     type: string

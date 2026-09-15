@@ -35,8 +35,8 @@ groundwork than one that does not.
 ## Platform configuration
 
 Not a service. This one scaffolds the repository a **platform team** hands to an
-application team, so that team can change its own environments, groups and role
-bindings by pull request without being able to grant itself cloud access.
+application team, so that team can change its own environments and decide who may
+deploy into them, by pull request, without being able to grant itself cloud access.
 
 | Template | What it creates | What it shows |
 | -------- | --------------- | ------------- |

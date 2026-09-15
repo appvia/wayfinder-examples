@@ -14,7 +14,7 @@ platform configuration. Change it by pull request.
 | Path | What it is |
 |---|---|
 | `environments.yaml` | The environment-to-account map. Decides what gets **vended** |
-| `manifests/` | Environments, groups and role bindings. Decides what **exists** in Wayfinder |
+| `manifests/` | Environments, and the role bindings saying who may deploy into them. Decides what **exists** in Wayfinder |
 | `.wayfinder/ci.env` | The values that identify this repository to Wayfinder |
 | `.github/workflows/plan.yaml` | On a pull request: says what would change |
 | `.github/workflows/apply.yaml` | On merge to `main`: applies, then vends any missing account |
@@ -33,8 +33,8 @@ is a deletion.
 ## Adding an environment
 
 Add it to **both** `environments.yaml` and `manifests/`. The map says where it deploys; the
-manifests say that it exists. Then add its deployer group and binding, following the
-`${{ .Inputs.firstEnvironment }}` pattern.
+manifests say that it exists. Then add a `deployer` role binding per person who should
+reach it, following the `${{ .Inputs.firstEnvironment }}` pattern.
 
 Whether that vends a new cloud account depends on the `account` value: a new one vends, an
 existing one does not. Two environments can share an account deliberately.
@@ -42,8 +42,9 @@ existing one does not. Two environments can share an account deliberately.
 ## What must never be in this repository
 
 - **`ExternalIdentity` objects.** A team can change its own platform configuration but
-  cannot grant itself cloud access. Identities live with the platform; only the *grant*
-  names your group.
+  cannot grant itself cloud access. Identities live with the platform, and their grant
+  names the `deployer` role in an environment — `manifests/bindings.yaml` is what
+  decides who holds it.
 - **Cloud account ids, role ARNs, or any estate identifier.** Wayfinder is the broker and
   holds those.
 
