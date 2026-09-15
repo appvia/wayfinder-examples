@@ -1,0 +1,132 @@
+# On merge to main: apply, then vend any account that does not exist yet.
+#
+# `--prune` is what makes this repository authoritative — remove a manifest and
+# the object goes. It is scoped by BOTH --owner and the workspace, so it can only
+# ever reap what this repository created. `--confirm` is required because pruning
+# is destructive and would otherwise prompt.
+#
+# The vend step is the interesting half. It reads the environment map and asks
+# Wayfinder whether each environment's ExternalIdentity reports Verified. That
+# identity is the LAST thing the vending workflow creates, and Verified comes
+# from a real AssumeRoleWithWebIdentity — so it is the only honest answer to "did
+# the whole vend finish". This keeps the decision here, where the map lives, and
+# means a re-run after a successful vend does nothing.
+#
+# This file is copied into your repository verbatim — Wayfinder does not template
+# it. Per-repository values live in .wayfinder/ci.env; per-installation values are
+# GitHub repository or organisation variables.
+name: Apply
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Load the repository's Wayfinder context
+        run: grep -E '^[A-Z][A-Z0-9_]*=' .wayfinder/ci.env >> "$GITHUB_ENV"
+
+      - name: Install the Wayfinder CLI
+        run: |
+          curl -sfL https://get.wayfinder.run/install | sh
+          wf version
+
+      - name: Apply
+        env:
+          WAYFINDER_TENANT: ${{ env.WF_TENANT }}
+          WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
+        run: |
+          wf apply -w "${WF_WORKSPACE}" -f ./manifests/ \
+            --owner "${WF_OWNER}" \
+            --prune --confirm
+
+      # yq rather than a shell parser because the map is YAML, and getting this
+      # subtly wrong means vending the wrong number of accounts.
+      - name: Install yq
+        run: |
+          sudo curl -sfL -o /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Vend any account that does not exist yet
+        env:
+          WAYFINDER_TENANT: ${{ env.WF_TENANT }}
+          WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
+          # The account's root email is derived from this by subaddressing, so it
+          # must be a real inbox on a domain that supports it. A repository or
+          # organisation variable rather than anything baked into the template.
+          WAYFINDER_OWNER_EMAIL: ${{ vars.WAYFINDER_OWNER_EMAIL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${WAYFINDER_OWNER_EMAIL}" ]; then
+            echo "::error::Set the WAYFINDER_OWNER_EMAIL repository variable — a vended account's root email is derived from it."
+            exit 1
+          fi
+
+          for envname in $(yq -r '.environments | keys | .[]' environments.yaml); do
+            account=$(yq -r ".environments.\"${envname}\".account" environments.yaml)
+            region=$(yq -r ".environments.\"${envname}\".region" environments.yaml)
+
+            # Is this environment's identity VERIFIED?
+            #
+            # Existence is NOT the test, and this is the trap: an ExternalIdentity
+            # can exist while being completely broken — a previous run that reached
+            # register_identity with bad outputs leaves one behind — and
+            # `wf get externalidentity` exits 0 for it regardless. Testing existence
+            # would then report "already vended" and skip the vend forever.
+            # `|| true` is required with `set -o pipefail`. An identity that does
+            # not exist yet makes `wf get` exit non-zero, which fails the
+            # pipeline, which under `set -e` ends the job — on exactly the path
+            # where there IS an account to vend. The jq fallback below never gets
+            # to run without it.
+            verified=$(wf get externalidentity "aws-${envname}" \
+                 -w "${WF_WORKSPACE}" -e "${envname}" -o json 2>/dev/null \
+                 | jq -r '[.status.conditions[]? | select(.type=="Verified") | .status] | first // "missing"' \
+                 || true)
+            verified="${verified:-missing}"
+
+            if [ "${verified}" = "True" ]; then
+              echo "${envname}: identity verified, already vended"
+              continue
+            fi
+            echo "${envname}: identity is ${verified} — vending account ${WF_TEAM}-${account} in ${region}"
+
+            args=(
+              --input "workspace=${WF_WORKSPACE}"
+              --input "environment=${envname}"
+              --input "accountName=${WF_TEAM}-${account}"
+              --input "ownerEmail=${WAYFINDER_OWNER_EMAIL}"
+            )
+            # An `if`, not `[ -n ... ] && ...`: with no cost code the `&&` chain
+            # returns non-zero, and `set -e` ends the job rather than skipping
+            # one optional flag.
+            if [ -n "${WF_COST_CODE:-}" ]; then
+              args+=(--input "costCode=${WF_COST_CODE}")
+            fi
+
+            # --wait-timeout must be raised: it defaults to 5 minutes, which is
+            # under the whole vend. The account itself is FAST — 11 seconds,
+            # measured; the "10-30 minutes" figure was inherited from the Azure
+            # flow and is wrong for direct Organizations vending. The slow part is
+            # the CloudFormation StackSet, a little over two minutes. 15m is
+            # therefore generous rather than hopeful.
+            wf invoke workflow "${WF_VEND_WORKFLOW}" \
+              -w "${WF_PLATFORM_WORKSPACE}" \
+              "${args[@]}" \
+              --wait --wait-timeout 15m
+          done

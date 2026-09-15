@@ -1,0 +1,52 @@
+# On a pull request: say what WOULD change, and change nothing.
+#
+# `wf apply --prune --dry-run server` is both the validation and the review — the
+# CLI reports what would be created, changed and removed in one command, so there
+# is no separate diff step.
+#
+# This is trustworthy rather than advisory because of the credential, not the
+# command: the service account's federated trust is pinned to refs/heads/main, so
+# a pull-request branch CANNOT apply even if this workflow were changed to try.
+# The worst a malicious pull request can do here is print a plan.
+#
+# This file is copied into your repository verbatim — Wayfinder does not template
+# it. Per-repository values live in .wayfinder/ci.env; per-installation values are
+# GitHub repository or organisation variables.
+name: Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  # Required: the Wayfinder CLI exchanges the Actions OIDC token for a Wayfinder
+  # one. Without id-token: write there is no token to exchange, and the CLI fails
+  # telling you so.
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Load the repository's Wayfinder context
+        run: grep -E '^[A-Z][A-Z0-9_]*=' .wayfinder/ci.env >> "$GITHUB_ENV"
+
+      - name: Install the Wayfinder CLI
+        run: |
+          curl -sfL https://get.wayfinder.run/install | sh
+          wf version
+
+      - name: Plan
+        env:
+          WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+          WAYFINDER_TENANT: ${{ env.WF_TENANT }}
+          # Fully qualified: tenant:workspace:name.
+          WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
+        run: |
+          wf apply -w "${WF_WORKSPACE}" -f ./manifests/ \
+            --owner "${WF_OWNER}" \
+            --prune --dry-run server

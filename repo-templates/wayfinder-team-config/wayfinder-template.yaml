@@ -1,0 +1,98 @@
+# Wayfinder repo template definition.
+#
+# Parsed strictly: an unrecognised key here is an error, not a warning.
+# Everything under skeleton/ is what gets written into the new repository.
+name: Wayfinder team configuration
+description: >-
+  A team's Wayfinder platform configuration as code. Holds the team's
+  environments, per-environment deployer groups and role bindings, plus the
+  environment-to-account map its CI reads to decide when a cloud account needs
+  vending. Applied with `wf apply --prune`, so the repository is the source of
+  truth for everything it declares.
+
+inputs:
+  - name: team
+    description: >-
+      Team name, e.g. "payments". Used in the group names and as the prefix of
+      each vended account's name.
+    type: string
+    minLength: 2
+    maxLength: 40
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  # Named separately from `team` on purpose. The vending workflow builds the
+  # OIDC subject's third field from the WORKSPACE, so a team-ish alias that did
+  # not match a real workspace would produce a trust nothing can use. They
+  # usually hold the same value; conflating them hides the one case that breaks.
+  - name: workspace
+    description: >-
+      Wayfinder workspace the team's objects live in. Normally the same as the
+      team name.
+    type: string
+    minLength: 2
+    maxLength: 40
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  - name: serviceAccount
+    description: >-
+      Name of the CI service account this repository authenticates as, created
+      by the onboarding workflow. Not fully qualified here — CI builds
+      tenant:workspace:name itself.
+    type: string
+    minLength: 2
+    maxLength: 60
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  - name: firstEnvironment
+    description: Name of the one environment the repository starts with.
+    type: string
+    optional: true
+    defaultValue: "dev"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: region
+    description: Cloud region the first environment's account is vended in.
+    type: string
+    optional: true
+    defaultValue: "eu-west-2"
+
+  - name: costCode
+    description: Cost code a vended account's spend is tagged with.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 40
+
+  # The vend is the platform team's workflow, not the team's. Both are inputs so
+  # a platform team that names things differently does not have to fork the
+  # template.
+  - name: platformWorkspace
+    description: Workspace holding the platform team's vending workflow.
+    type: string
+    optional: true
+    defaultValue: "platform"
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  - name: vendWorkflow
+    description: Name of the workflow that vends one cloud account.
+    type: string
+    optional: true
+    defaultValue: "vend-aws-account"
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+skeleton:
+  path: skeleton
+
+  # Files listed here are copied byte for byte. Their contents are NOT rendered,
+  # so they must not use the `$${{ }}` escape either — it would land literally.
+  #
+  # Note that these globs are matched with path.Match: `**` is not supported, and
+  # `*.yaml` does not match `*.yml`, which is why both are listed.
+  raw:
+    # GitHub Actions has its own ${{ }} expression syntax, and these workflows
+    # are also full of ordinary shell ${VAR}. Keeping them raw means they are
+    # valid Actions YAML exactly as written, here and in the generated
+    # repository. Per-repository values reach them through .wayfinder/ci.env,
+    # which is rendered.
+    - ".github/workflows/*.yaml"
+    - ".github/workflows/*.yml"
