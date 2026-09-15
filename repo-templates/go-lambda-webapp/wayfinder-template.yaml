@@ -1,0 +1,85 @@
+# Go Lambda web app — the template itself.
+#
+# Parsed strictly: an unrecognised key here is an error, not a warning.
+# Everything under skeleton/ is what gets written into the new repository.
+#
+# STATUS: a skeleton. It renders a README and nothing else. The application, its
+# stack and its delivery pipeline are being built in a repository created FROM
+# this template, and will be back-filled here once they work. Building the app
+# first keeps the two classes of failure apart: a broken deploy in a real
+# repository is a broken deploy, whereas the same thing here could equally be a
+# bad render.
+name: Go Lambda web app
+description: >-
+  A Go API running as a container on AWS Lambda behind API Gateway, a DynamoDB
+  table it reads and writes, and a single-page web app served by CloudFront that
+  talks to it. No cluster, and no hand-written IAM.
+
+inputs:
+  - name: serviceName
+    description: >-
+      Name of the service. Used for the Go module, the container image, the
+      stack and the deployed resources.
+    type: string
+    minLength: 2
+    maxLength: 40
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  - name: description
+    description: What this service does, recorded in its README and on the stack.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 200
+
+  # Left blank when the repository is scaffolded into the workspace it will deploy
+  # into, which is the usual case. CI falls back to the WF_WORKSPACE variable when
+  # it is empty.
+  - name: workspace
+    description: Wayfinder workspace this service deploys into.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 40
+
+  # The three environments the delivery pipeline deploys to. A pull request gets a
+  # preview instance, merging deploys develop, and a `v*` tag deploys production —
+  # see ../DELIVERY-PIPELINE.md.
+  - name: previewEnvironment
+    description: Environment a pull request's preview instance is deployed to.
+    type: string
+    optional: true
+    defaultValue: "dev"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: developEnvironment
+    description: Environment deployed to when a pull request merges.
+    type: string
+    optional: true
+    defaultValue: "dev"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: prodEnvironment
+    description: Environment deployed to when a `v*` tag is pushed.
+    type: string
+    optional: true
+    defaultValue: "prod"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+skeleton:
+  path: skeleton
+
+  # Files copied byte for byte. Their contents are NOT rendered, so they must not
+  # use the `$${{ }}` escape either — it would land literally.
+  #
+  # The workflows are full of GitHub Actions' own ${{ }} expressions and ordinary
+  # shell ${VAR}, so keeping them raw means they are valid exactly as written, here
+  # and in the generated repository. Per-repository values reach them through
+  # .wayfinder/ci.env, which IS rendered.
+  #
+  # These globs are matched with path.Match: `**` is not supported, and `*.yaml`
+  # does not match `*.yml`, which is why both are listed.
+  raw:
+    - ".github/workflows/*.yaml"
+    - ".github/workflows/*.yml"
+    - ".wayfinder/*.sh"
