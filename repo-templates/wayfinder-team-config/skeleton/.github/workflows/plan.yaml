@@ -30,11 +30,10 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     # The Wayfinder toolbox, which already carries `wf`, `jq` and `yq`, so no step
-    # here downloads a CLI. The toolbox is versioned with the Wayfinder it talks to,
-    # so pinning WAYFINDER_TOOLBOX_IMAGE to your installation's version gets you a
-    # `wf` that matches your server rather than whatever was newest that morning.
+    # here downloads any of them. This tag tracks the develop instance these
+    # templates are tested against, so the CLI matches the server it talks to.
     container:
-      image: ${{ vars.WAYFINDER_TOOLBOX_IMAGE || 'quay.io/appvia-wayfinder/wftoolbox:latest' }}
+      image: quay.io/appvia-wf-dev/wftoolbox:latest
     steps:
       - uses: actions/checkout@v6
 

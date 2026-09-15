@@ -109,23 +109,23 @@ being automatic.
 
 ## Repository variables
 
-Set these on the **organisation** rather than the repository. Wayfinder does not
-set GitHub variables when it scaffolds, so a per-repository value is a manual step
-in the middle of an otherwise hands-off flow; an organisation value is set once and
-every team repository after it works untouched.
+**Nothing here has to be set for a scaffolded repository to work.** Wayfinder cannot
+set a GitHub variable when it scaffolds, so anything the CI could only get from one
+would put a person back in the middle of a flow whose point is that there is not
+one. Every value the CI needs therefore arrives as a template input and is written
+into `.wayfinder/ci.env`.
 
-| Variable | Needed? | What it is |
+These variables exist for installations that would rather hold a value in one place
+for every team repository. Each **overrides** the scaffolded value, so setting one on
+the organisation is a choice, not a prerequisite.
+
+| Variable | Overrides | What it is |
 | --- | --- | --- |
-| `WAYFINDER_OWNER_EMAIL` | **yes**, to vend | The mailbox a vended account's root email is derived from by subaddressing. Its domain must support that (Google Workspace does). The apply job stops with a message naming it if it is unset |
-| `WAYFINDER_SERVER` | only off-SaaS | The Wayfinder API URL. Unset, the CLI uses its own default, which is the Wayfinder SaaS API |
-| `WAYFINDER_TOOLBOX_IMAGE` | only off-SaaS | The image both CI jobs run inside. Unset, they use `quay.io/appvia-wayfinder/wftoolbox:latest` |
-
-`WAYFINDER_SERVER` can also be supplied at scaffold time with the `wayfinderServer`
-input, which is written into `.wayfinder/ci.env`. The GitHub variable wins when
-both are set, so an installation can set it once centrally and the input is there
-for the case where that has not happened yet.
+| `WAYFINDER_OWNER_EMAIL` | the `ownerEmail` input | The mailbox a vended account's root email is derived from by subaddressing. Its domain must support that (Google Workspace does). With neither set, the apply job stops and says so |
+| `WAYFINDER_SERVER` | the `wayfinderServer` input | The Wayfinder API URL. With neither set, the CLI uses its own default, which is the Wayfinder SaaS API |
 
 Both CI jobs run **inside the Wayfinder toolbox image**, which already carries `wf`,
-`jq` and `yq`, so neither downloads a tool. Set `WAYFINDER_TOOLBOX_IMAGE` to run
-them on the version your own installation is on — `wf` is then the one that matches
-your server, instead of whichever was newest the morning the job ran.
+`jq` and `yq`, so neither downloads a tool. The tag is written into the workflows
+rather than taken from a variable: Wayfinder cannot set a GitHub variable when it
+scaffolds, so every variable the template needs is a manual step in a flow whose
+point is that there is not one.

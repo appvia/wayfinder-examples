@@ -33,12 +33,10 @@ jobs:
   apply:
     runs-on: ubuntu-latest
     # The Wayfinder toolbox, which already carries `wf`, `jq` and `yq`, so no step
-    # here downloads any of them. The toolbox is versioned with the Wayfinder it
-    # talks to, so pinning WAYFINDER_TOOLBOX_IMAGE to your installation's version
-    # gets you a `wf` that matches your server rather than whatever was newest that
-    # morning.
+    # here downloads any of them. This tag tracks the develop instance these
+    # templates are tested against, so the CLI matches the server it talks to.
     container:
-      image: ${{ vars.WAYFINDER_TOOLBOX_IMAGE || 'quay.io/appvia-wayfinder/wftoolbox:latest' }}
+      image: quay.io/appvia-wf-dev/wftoolbox:latest
     steps:
       - uses: actions/checkout@v6
 
@@ -67,14 +65,15 @@ jobs:
           WAYFINDER_TENANT: ${{ env.WF_TENANT }}
           WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
           # The account's root email is derived from this by subaddressing, so it
-          # must be a real inbox on a domain that supports it. A repository or
-          # organisation variable rather than anything baked into the template.
-          WAYFINDER_OWNER_EMAIL: ${{ vars.WAYFINDER_OWNER_EMAIL }}
+          # must be a real inbox on a domain that supports it. Set at scaffold time
+          # by the onboarding workflow and written into .wayfinder/ci.env; the
+          # GitHub variable overrides it where an installation prefers one place.
+          WAYFINDER_OWNER_EMAIL: ${{ vars.WAYFINDER_OWNER_EMAIL || env.WF_OWNER_EMAIL }}
         run: |
           set -euo pipefail
 
           if [ -z "${WAYFINDER_OWNER_EMAIL}" ]; then
-            echo "::error::Set the WAYFINDER_OWNER_EMAIL repository variable — a vended account's root email is derived from it."
+            echo "::error::No owner mailbox: scaffold with the ownerEmail template input, or set the WAYFINDER_OWNER_EMAIL variable. A vended account's root email is derived from it."
             exit 1
           fi
 
