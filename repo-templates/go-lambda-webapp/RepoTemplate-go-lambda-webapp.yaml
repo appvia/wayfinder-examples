@@ -1,0 +1,27 @@
+# Registers the Go Lambda web app template with Wayfinder.
+#
+# This repository is public, so Wayfinder reads the template anonymously — no
+# GitHub connection is needed to register it or to preview what it renders.
+# Creating a repository from it does need a connected GitHub organisation.
+#
+#   wf apply -f RepoTemplate-go-lambda-webapp.yaml
+#   wf get repotemplate go-lambda-webapp -o yaml     # check status.manifest synced
+#
+apiVersion: sourcecontrol/v3
+kind: RepoTemplate
+metadata:
+  name: go-lambda-webapp
+  # Free-form axes for filtering the catalogue. Classification is spec.category.
+  labels:
+    language: go
+    framework: aws-lambda
+    family: wayfinder-golden-path
+spec:
+  url: https://github.com/appvia/wayfinder-examples.git
+  path: repo-templates/go-lambda-webapp
+  # The branch this template is being built on. It moves to `main`, and then to a
+  # tag, once the shape has settled — tracking a branch means every merge changes
+  # the template for everyone on their next resync.
+  ref: add-workspace-repo-template
+  displayName: Go Lambda web app
+  category: service

@@ -1,0 +1,201 @@
+# Deploys a tagged release to production.
+#
+# Every job checks out the tag rather than the branch head, so the image, the
+# tests and the Wayfinder.yaml that is deployed all come from the tagged tree.
+# The image is tagged with the release tag and that exact tag is what production
+# runs.
+#
+# There are two independent gates:
+#
+#   1. `environment: production` — GitHub's own gate. Configure reviewers and
+#      wait timers on the environment. It also scopes the OIDC token to
+#      `repo:<owner>/<repo>:environment:production`, which is what the
+#      production service account credential trusts, so the gate is enforced by
+#      the token, not only by the UI.
+#
+#   2. `--require-approval` — Wayfinder's gate on the infrastructure plan. Each
+#      CloudResource is planned and pauses for approval. Opt in by setting the
+#      WF_PROD_REQUIRE_APPROVAL variable to `true`.
+#
+# This file is copied into your repository verbatim — Wayfinder does not
+# template it. Per-repository values live in .wayfinder/ci.env.
+name: Deploy to production
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      # Each template implements ci-setup for whatever its language needs —
+      # nothing, or installing a tool the runner does not ship. It is what keeps
+      # this workflow identical across every Wayfinder service template.
+      - name: Set up the toolchain
+        run: make ci-setup
+
+      - name: Test
+        run: make test
+
+      - name: Lint
+        run: make lint
+
+  build:
+    name: Build image
+    needs: [test]
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Load repository configuration
+        # $GITHUB_ENV accepts KEY=value lines only, so comments are filtered out.
+        run: grep -E '^[A-Z][A-Z0-9_]*=' .wayfinder/ci.env >> "$GITHUB_ENV"
+
+      - name: Compute the image reference
+        id: meta
+        env:
+          RELEASE: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          echo "image=${WF_IMAGE_REPO}:${RELEASE}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.WF_IMAGE_REGISTRY }}
+          username: ${{ vars.REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+          labels: |
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+
+  deploy:
+    name: Deploy
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: production
+    container:
+      image: ${{ vars.WF_TOOLBOX_IMAGE || 'quay.io/appvia-wayfinder/wftoolbox:latest' }}
+    env:
+      WAYFINDER_SERVER: ${{ vars.WF_SERVER }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Resolve the Wayfinder context
+        run: .wayfinder/ci-env.sh prod
+        env:
+          WF_WORKSPACE_VAR: ${{ vars.WF_WORKSPACE }}
+          # Production may live on a different cluster, identity or DNS zone.
+          # Each falls back to the shared value when no _PROD override is set.
+          WF_HOST_CLUSTER: ${{ vars.WF_HOST_CLUSTER_PROD || vars.WF_HOST_CLUSTER }}
+          WF_IDENTITY: ${{ vars.WF_IDENTITY_PROD || vars.WF_IDENTITY }}
+          WF_REGION: ${{ vars.WF_REGION_PROD || vars.WF_REGION }}
+          WF_DNS_ZONE: ${{ vars.WF_DNS_ZONE_PROD || vars.WF_DNS_ZONE }}
+
+      - name: Verify the Wayfinder identity
+        run: wf whoami
+
+      # Guards against a misconfigured WF_SERVER pointing production traffic at
+      # the wrong Wayfinder installation. Set WF_EXPECT_INSTANCE_ID to the value
+      # of `wf serverinfo -o json | jq -r .instanceIdentifier` for production.
+      - name: Verify the Wayfinder installation
+        if: vars.WF_EXPECT_INSTANCE_ID != ''
+        env:
+          EXPECTED: ${{ vars.WF_EXPECT_INSTANCE_ID }}
+        run: |
+          set -euo pipefail
+          actual="$(wf serverinfo -o json | jq -r .instanceIdentifier)"
+          if [[ "${actual}" != "${EXPECTED}" ]]; then
+            echo "::error::Expected Wayfinder installation '${EXPECTED}' but this is '${actual}'. Nothing was deployed."
+            exit 1
+          fi
+
+      - name: Deploy the release
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+          RELEASE: ${{ github.ref_name }}
+          REQUIRE_APPROVAL: ${{ vars.WF_PROD_REQUIRE_APPROVAL }}
+          APPROVAL_TIMEOUT: ${{ vars.WF_PROD_APPROVAL_TIMEOUT }}
+        run: |
+          set -euo pipefail
+          mapfile -t args < "${WF_DEPLOY_ARGS_FILE}"
+
+          if [[ "${REQUIRE_APPROVAL:-false}" == "true" ]]; then
+            args+=("--require-approval")
+            if [[ -n "${APPROVAL_TIMEOUT:-}" ]]; then
+              args+=("--approval-timeout" "${APPROVAL_TIMEOUT}")
+            fi
+          fi
+
+          set +e
+          wf deploy --non-interactive --timeout 45m \
+            -i "${WF_INSTANCE}" \
+            -e "${WAYFINDER_ENVIRONMENT}" \
+            -f Wayfinder.yaml \
+            --env-var IMAGE="${IMAGE}" \
+            --env-var RELEASE="${RELEASE}" \
+            --out-file ./deploy.json \
+            "${args[@]}"
+          rc=$?
+          set -e
+
+          # Exit code 3 means an approval gate was not decided in time. Nothing
+          # was applied — this is not a failed deployment, and re-running the
+          # job once the plan is approved is the correct next step. Anything
+          # else is a real failure.
+          if [[ ${rc} -eq 3 ]]; then
+            echo "::error title=Awaiting approval::Deployment of ${RELEASE} is paused at a Wayfinder approval gate and the approval window elapsed. Nothing has been applied. Approve the plan with 'wf approve cloudresource', then re-run this job."
+            {
+              echo "### :hourglass: ${RELEASE} is awaiting approval"
+              echo ""
+              echo "No changes were applied. Review the plan above, approve it with"
+              echo "\`wf approve cloudresource <name> -w ${WAYFINDER_WORKSPACE} -e ${WAYFINDER_ENVIRONMENT}\`,"
+              echo "then re-run this job."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
+          exit ${rc}
+
+      - name: Summarise
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+          RELEASE: ${{ github.ref_name }}
+        run: |
+          {
+            echo "### Released ${RELEASE} to ${WAYFINDER_ENVIRONMENT}"
+            echo ""
+            echo "- Instance: \`${WF_INSTANCE}\`"
+            echo "- Image: \`${IMAGE}\`"
+            echo "- URL: $(jq -r '.componentOutputs.app.url.value // "no url output"' ./deploy.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
