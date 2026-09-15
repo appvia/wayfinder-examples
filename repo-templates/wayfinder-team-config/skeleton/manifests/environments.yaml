@@ -5,7 +5,7 @@
 # Keep this in step with ../environments.yaml. The map decides what gets VENDED;
 # these manifests decide what EXISTS in Wayfinder. An environment here with no
 # entry in the map has nowhere to deploy to.
-apiVersion: core/v3
+apiVersion: org/v3
 kind: Environment
 metadata:
   name: ${{ .Inputs.firstEnvironment }}
