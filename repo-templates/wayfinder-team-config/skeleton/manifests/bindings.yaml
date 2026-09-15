@@ -1,0 +1,22 @@
+# What the deployer group may do inside Wayfinder.
+#
+# Note what is NOT here, and must never be: `ExternalIdentity` objects. The line
+# this repository holds is that a team can change its own platform configuration
+# but cannot grant itself cloud access. A team able to edit an identity's
+# `usableBy` could grant itself production, so identities live with the platform
+# and only the GRANT names this group.
+#
+# Also never here: cloud account ids, role ARNs, or any other estate identifier.
+# Wayfinder is the broker and holds those.
+apiVersion: core/v3
+kind: RoleBinding
+metadata:
+  name: ${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-deployers
+  workspace: ${{ .Inputs.workspace }}
+spec:
+  role: deployer
+  scope: environment
+  environment: ${{ .Inputs.firstEnvironment }}
+  subjects:
+    - kind: Group
+      name: ${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-deployers

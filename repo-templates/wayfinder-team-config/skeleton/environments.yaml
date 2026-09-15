@@ -1,0 +1,39 @@
+# The environment-to-account map: the contract between this repository and the
+# platform's vending workflow.
+#
+# Three properties follow from its shape, and none of them is written down
+# anywhere else:
+#
+#   Environments are MANY-TO-ONE onto accounts. `test` and `nonprod` can share
+#   one account. The set of accounts to vend is the DISTINCT set of `account`
+#   values, not the number of environments.
+#
+#   Region is PER ENVIRONMENT. Two environments sharing an account across two
+#   regions need two state buckets, because a bucket is per account and region.
+#
+#   Adding an environment on an EXISTING account vends nothing. Adding one on a
+#   new account vends. That falls out of the map without anyone encoding it, and
+#   it is exactly the behaviour you want from a pull request.
+#
+# The `account` value becomes the cloud account name, prefixed with the team —
+# so `${{ .Inputs.firstEnvironment }}` here is the account
+# `${{ .Inputs.team }}-${{ .Inputs.firstEnvironment }}`. A closed AWS account
+# holds its root email for 90 days and the address cannot be reused, so
+# RE-VENDING a closed account needs a NEW value here (`dev-2`), not the same one.
+environments:
+  ${{ .Inputs.firstEnvironment }}:
+    account: ${{ .Inputs.firstEnvironment }}
+    region: ${{ .Inputs.region }}
+
+  # Add environments by pull request as the team needs them. Examples, commented
+  # out because an empty estate is the honest starting point:
+  #
+  # test:
+  #   account: nonprod
+  #   region: ${{ .Inputs.region }}
+  # nonprod:
+  #   account: nonprod        # shares the account with test - vends nothing extra
+  #   region: ${{ .Inputs.region }}
+  # live:
+  #   account: prod
+  #   region: ${{ .Inputs.region }}
