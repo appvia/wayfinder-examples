@@ -92,6 +92,22 @@ inputs:
     defaultValue: ""
     maxLength: 200
 
+  # A vended account's root email is derived from this by subaddressing, so the
+  # domain has to support that (Google Workspace does). It is the PLATFORM team's
+  # mailbox, not the team lead's - the platform team owns the accounts it vends.
+  # Supplied by the onboarding workflow so that scaffolding a repository leaves
+  # nothing for a person to set afterwards.
+  - name: ownerEmail
+    description: >-
+      Mailbox a vended account's root email is derived from, e.g.
+      "cloud-accounts@example.com" gives "cloud-accounts+wf-payments-dev@example.com".
+      Leave blank to take it from the WAYFINDER_OWNER_EMAIL GitHub variable instead,
+      which wins when both are set.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 200
+
   - name: platformWorkspace
     description: Workspace holding the platform team's vending workflow.
     type: string
