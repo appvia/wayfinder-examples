@@ -1,9 +1,9 @@
 # Wayfinder team configuration template
 
 A team's Wayfinder platform configuration as code. It scaffolds the repository a
-platform team hands to an application team: the team's environments, groups and
-role bindings, plus the environment-to-account map its CI reads to decide when a
-cloud account needs vending.
+platform team hands to an application team: the team's environments and the role
+bindings saying who may deploy into them, plus the environment-to-account map its
+CI reads to decide when a cloud account needs vending.
 
 Unlike the golden paths, this template does not build or deploy an application.
 It creates the repository that decides what a team's slice of the platform looks
@@ -25,25 +25,30 @@ which Wayfinder reads once it has followed that pointer. See
 **A team can change its own platform configuration but cannot grant itself cloud
 access.** That one line decides everything in the skeleton.
 
-Environments, deployer groups and role bindings live in the team's repository, so
-the team changes them by pull request without asking anyone. `ExternalIdentity`
-objects never do — an identity's `usableBy` is what decides who reaches a cloud
-account, so a team able to edit one could grant itself production. Identities stay
-with the platform team, and the team's repository only ever names the *group* that
-a platform-side grant points at.
+Environments and role bindings live in the team's repository, so the team changes
+them by pull request without asking anyone. `ExternalIdentity` objects never do —
+an identity's `usableBy` is what decides who reaches a cloud account, so a team
+able to edit one could grant itself production. Identities stay with the platform
+team.
 
-That is why `manifests/groups.yaml` carries a warning about its own name. The
-group name is a contract with the vending workflow, which grants the vended
-identity to `<workspace>-<environment>-deployers`. Rename it and the team loses
-access to its own cloud account with no error at apply time — the grant simply
-names a group that no longer exists.
+**Roles are assigned to people directly, not through a group.** The vending
+workflow grants the vended identity to `role:deployer@<workspace>/<environment>` —
+"whoever holds deployer here" — and `manifests/bindings.yaml` is what decides who
+that is. Nothing in between has a name that can be mistyped.
+
+A group would put one there: the platform's grant would have to name the group, and
+renaming it in this repository would take away the team's cloud access with nothing
+failing at apply time. It would also not work — a grant that names a group always
+resolves at tenant scope, and creating a tenant-scoped group needs permissions this
+repository's CI is deliberately not given.
 
 ## The environment map
 
 `environments.yaml` is separate from `manifests/` on purpose, and the split is
 what makes the vend decidable:
 
-- **`manifests/`** says what **exists** in Wayfinder. Applied with `--prune`.
+- **`manifests/`** says what **exists** in Wayfinder, and who may deploy. Applied
+  with `--prune`.
 - **`environments.yaml`** says where each environment **deploys to**. Read by CI
   to work out which accounts are missing.
 
