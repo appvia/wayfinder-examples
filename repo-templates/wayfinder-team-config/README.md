@@ -104,13 +104,17 @@ being automatic.
 
 ## Repository variables
 
-Two, set on the repository or the organisation:
+Set these on the **organisation** rather than the repository. Wayfinder does not
+set GitHub variables when it scaffolds, so a per-repository value is a manual step
+in the middle of an otherwise hands-off flow; an organisation value is set once and
+every team repository after it works untouched.
 
-| Variable | What it is |
-| --- | --- |
-| `WAYFINDER_SERVER` | The Wayfinder API URL, e.g. `https://api.example.wayfinder.run` |
-| `WAYFINDER_OWNER_EMAIL` | The mailbox a vended account's root email is derived from by subaddressing. Its domain must support that (Google Workspace does) |
+| Variable | Needed? | What it is |
+| --- | --- | --- |
+| `WAYFINDER_OWNER_EMAIL` | **yes**, to vend | The mailbox a vended account's root email is derived from by subaddressing. Its domain must support that (Google Workspace does). The apply job stops with a message naming it if it is unset |
+| `WAYFINDER_SERVER` | only off-SaaS | The Wayfinder API URL. Unset, the CLI uses its own default, which is the Wayfinder SaaS API |
 
-They are variables rather than template inputs because they differ per Wayfinder
-installation, not per repository — the same reason the golden paths keep their
-server URL out of `.wayfinder/ci.env`.
+`WAYFINDER_SERVER` can also be supplied at scaffold time with the `wayfinderServer`
+input, which is written into `.wayfinder/ci.env`. The GitHub variable wins when
+both are set, so an installation can set it once centrally and the input is there
+for the case where that has not happened yet.

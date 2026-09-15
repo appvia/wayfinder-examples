@@ -42,7 +42,10 @@ jobs:
 
       - name: Plan
         env:
-          WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+          # The GitHub variable wins over the scaffold-time value, so one
+          # installation-wide setting covers every repository. Both blank leaves
+          # the CLI on its own default, the SaaS API.
+          WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER || env.WF_SERVER }}
           WAYFINDER_TENANT: ${{ env.WF_TENANT }}
           # Fully qualified: tenant:workspace:name.
           WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
