@@ -1,5 +1,10 @@
 # What the deployer group may do inside Wayfinder.
 #
+# WHERE THIS OBJECT SITS IS WHAT DECIDES ITS SCOPE. `metadata.workspace` and
+# `metadata.environment` together make this an environment-scoped binding, so
+# the group holds `deployer` in that one environment and nowhere else. There is
+# no `scope:` field to set — moving the binding is how you change its reach.
+#
 # Note what is NOT here, and must never be: `ExternalIdentity` objects. The line
 # this repository holds is that a team can change its own platform configuration
 # but cannot grant itself cloud access. A team able to edit an identity's
@@ -8,15 +13,16 @@
 #
 # Also never here: cloud account ids, role ARNs, or any other estate identifier.
 # Wayfinder is the broker and holds those.
-apiVersion: core/v3
+apiVersion: org/v3
 kind: RoleBinding
 metadata:
   name: ${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-deployers
   workspace: ${{ .Inputs.workspace }}
-spec:
-  role: deployer
-  scope: environment
   environment: ${{ .Inputs.firstEnvironment }}
-  subjects:
-    - kind: Group
-      name: ${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-deployers
+spec:
+  roles:
+    - deployer
+  # One subject, not a list. A second grantee is a second binding.
+  subject:
+    kind: Group
+    name: ${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-deployers
