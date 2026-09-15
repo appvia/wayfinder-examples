@@ -61,18 +61,23 @@ account vends. Nobody encodes that rule — it falls out of the map.
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `plan.yaml` | pull request | `wf apply --prune --dry-run server` — reports what would be created, changed and removed |
-| `apply.yaml` | merge to `main` | applies with `--prune --confirm`, then vends an account for any environment whose identity is not `Verified` |
+| `apply.yaml` | merge to `main` | applies with `--prune --confirm` |
 
 The plan is trustworthy rather than advisory because of the credential, not the
 command: the CI service account's federated trust is pinned to `refs/heads/main`,
 so a pull-request branch cannot apply even if the workflow were edited to try.
 
-**`Verified` is the vend test, not existence.** An `ExternalIdentity` can exist
-while being completely broken — a vend that reached identity registration with bad
-outputs leaves one behind — and `wf get externalidentity` exits 0 for it either
-way. Testing existence would report "already vended" and skip the vend forever.
-`Verified` comes from a real `AssumeRoleWithWebIdentity`, so it is the only honest
-answer to "did the whole vend finish".
+**This repository does not vend cloud accounts.** An account is granted by the
+platform team, who run their vending workflow against one of your environments.
+It creates an `ExternalIdentity` and grants it to a role; `manifests/bindings.yaml`
+is where you decide who holds that role, so the team still decides who reaches
+what. `environments.yaml` records which account each environment expects, and is
+what you point the platform team at when you need one that does not exist yet.
+
+Keeping the vend out of here is why the CI service account needs nothing outside
+its own workspace. A job that invoked the platform's vending workflow would need
+manager access to the platform's workspace — which would let this repository edit
+the vending workflow itself, and a team could then grant itself cloud access.
 
 ## Using it
 
@@ -99,10 +104,8 @@ and calls do not exist yet:
 | The workspace and the first environment | named by `workspace` and `firstEnvironment` |
 | A CI service account, with a **federated** credential pinned to `refs/heads/main` | named by `serviceAccount` |
 | A `deployer` role binding for that service account in the workspace | so `wf apply` may write |
-| A vending workflow the CI may invoke | named by `vendWorkflow`, in `platformWorkspace` |
 
-The `onboard-aws` example in the Wayfinder repository creates the first three and
-provides the fourth. Leave `main` unprotected on the scaffolded repository: if a
+The `onboard-aws` example in the Wayfinder repository creates all three. Leave `main` unprotected on the scaffolded repository: if a
 ruleset protects it, Wayfinder correctly opens a pull request instead of
 committing to `main`, so nothing lands, no CI fires, and onboarding quietly stops
 being automatic.
@@ -121,11 +124,10 @@ the organisation is a choice, not a prerequisite.
 
 | Variable | Overrides | What it is |
 | --- | --- | --- |
-| `WAYFINDER_OWNER_EMAIL` | the `ownerEmail` input | The mailbox a vended account's root email is derived from by subaddressing. Its domain must support that (Google Workspace does). With neither set, the apply job stops and says so |
 | `WAYFINDER_SERVER` | the `wayfinderServer` input | The Wayfinder API URL. With neither set, the CLI uses its own default, which is the Wayfinder SaaS API |
 
 Both CI jobs run **inside the Wayfinder toolbox image**, which already carries `wf`,
-`jq` and `yq`, so neither downloads a tool. The tag is written into the workflows
+so neither downloads a tool. The tag is written into the workflows
 rather than taken from a variable: Wayfinder cannot set a GitHub variable when it
 scaffolds, so every variable the template needs is a manual step in a flow whose
 point is that there is not one.

@@ -1,25 +1,29 @@
-# The environment-to-account map: the contract between this repository and the
-# platform's vending workflow.
+# The environment-to-account map: what each of your environments expects to
+# deploy into.
+#
+# Nothing in this repository acts on it. Vending an account is the platform
+# team's to run, against one of your environments — this file is the record of
+# what you are asking for, and the thing to point them at when you need an
+# account that does not exist yet.
 #
 # Three properties follow from its shape, and none of them is written down
 # anywhere else:
 #
 #   Environments are MANY-TO-ONE onto accounts. `test` and `nonprod` can share
-#   one account. The set of accounts to vend is the DISTINCT set of `account`
+#   one account. The set of accounts needed is the DISTINCT set of `account`
 #   values, not the number of environments.
 #
 #   Region is PER ENVIRONMENT. Two environments sharing an account across two
 #   regions need two state buckets, because a bucket is per account and region.
 #
-#   Adding an environment on an EXISTING account vends nothing. Adding one on a
-#   new account vends. That falls out of the map without anyone encoding it, and
-#   it is exactly the behaviour you want from a pull request.
+#   Adding an environment on an EXISTING account needs no new account. Adding
+#   one on a new account does. That falls out of the map without anyone
+#   encoding it.
 #
 # The `account` value becomes the cloud account name, prefixed with the team —
-# so `${{ .Inputs.firstEnvironment }}` here is the account
-# `${{ .Inputs.team }}-${{ .Inputs.firstEnvironment }}`. A closed AWS account
-# holds its root email for 90 days and the address cannot be reused, so
-# RE-VENDING a closed account needs a NEW value here (`dev-2`), not the same one.
+# so `dev` here is the account `<team>-dev`. A closed AWS account holds its root
+# email for 90 days and the address cannot be reused, so replacing a closed
+# account needs a NEW value here (`dev-2`), not the same one.
 environments:
   ${{ .Inputs.firstEnvironment }}:
     account: ${{ .Inputs.firstEnvironment }}
