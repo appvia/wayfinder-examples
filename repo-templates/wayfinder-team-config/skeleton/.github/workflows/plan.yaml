@@ -34,6 +34,12 @@ jobs:
     # templates are tested against, so the CLI matches the server it talks to.
     container:
       image: quay.io/appvia-wf-dev/wftoolbox:latest
+    # A container job's default shell is `sh`, not the `bash` a runner gives you,
+    # and the vend step below builds its flags in an array - which `sh` rejects
+    # outright with a syntax error rather than misreading it.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v6
 
