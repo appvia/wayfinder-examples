@@ -66,6 +66,21 @@ inputs:
   # The vend is the platform team's workflow, not the team's. Both are inputs so
   # a platform team that names things differently does not have to fork the
   # template.
+  # Left blank in production: the CLI already defaults to the Wayfinder SaaS API,
+  # so a repository scaffolded against it needs to say nothing. Set it to point a
+  # scaffolded repository at a non-default installation without anyone having to
+  # remember a GitHub variable afterwards — which is the case while an
+  # installation is being tested.
+  - name: wayfinderServer
+    description: >-
+      Wayfinder API URL this repository's CI talks to. Leave blank for the
+      default SaaS API, or to take it from the WAYFINDER_SERVER GitHub variable
+      instead, which wins when both are set.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 200
+
   - name: platformWorkspace
     description: Workspace holding the platform team's vending workflow.
     type: string

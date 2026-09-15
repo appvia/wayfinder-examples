@@ -32,8 +32,6 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-latest
-    env:
-      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
     steps:
       - uses: actions/checkout@v6
 
@@ -47,6 +45,10 @@ jobs:
 
       - name: Apply
         env:
+          # The GitHub variable wins over the scaffold-time value, so one
+          # installation-wide setting covers every repository. Both blank leaves
+          # the CLI on its own default, the SaaS API.
+          WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER || env.WF_SERVER }}
           WAYFINDER_TENANT: ${{ env.WF_TENANT }}
           WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
         run: |
@@ -64,6 +66,7 @@ jobs:
 
       - name: Vend any account that does not exist yet
         env:
+          WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER || env.WF_SERVER }}
           WAYFINDER_TENANT: ${{ env.WF_TENANT }}
           WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
           # The account's root email is derived from this by subaddressing, so it
