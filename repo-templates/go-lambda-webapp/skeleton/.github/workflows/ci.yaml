@@ -6,11 +6,11 @@
 # the pull request closes.
 #
 # There is no image build here. The stack's `pushimage` component builds the
-# image and pushes it to an ECR the same stack creates, so there is no registry
-# to log into, no registry credential to store, and no address to know before
-# the first deploy. That component runs on this runner, which is why the deploy
-# jobs run on a plain ubuntu runner rather than in a container: they need
-# docker, make, go and node, which the runner already has.
+# image and pushes it to this service's own ECR repository, creating that
+# repository the first time anything deploys, so there is no registry to log
+# into and no registry credential to store. That component runs on this runner,
+# which is why the deploy jobs run on a plain ubuntu runner rather than in a
+# container: they need docker, make, go and node, which the runner already has.
 #
 # This file is copied into your repository verbatim — Wayfinder does not
 # template it, so you can edit it like any other workflow. Values that differ

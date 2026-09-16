@@ -1,17 +1,38 @@
 # What gets deployed, and what each part is allowed to reach.
 #
-# Two kinds of placeholder are filled in at deploy time, not when you edit:
+# Three kinds of placeholder are filled in at deploy time, not when you edit:
 #
 #   $${{ ... }}  A Wayfinder expression — a component's output, or a fact about
 #               the stack. Resolved in dependency order as the deploy runs.
-#   ${NAME}     Supplied on the command line with `wf deploy --env-var NAME=v`.
-#               Every one must resolve, and an --env-var nothing uses is an
-#               error rather than a silent no-op.
+#   ${NAME}     Supplied on the command line with `wf deploy --env-var NAME=v`,
+#               or taken from the environment `wf` itself runs in. Every one
+#               must resolve, and an --env-var nothing uses is an error rather
+#               than a silent no-op — so only a value every deploy has belongs
+#               here. RELEASE is the only one.
+#   $${NAME:-}  Left alone by Wayfinder and read by the shell the action runs
+#               in. This is how a value only some deploys have gets in: export
+#               it before you run `wf up`. Passing one with --env-var fails,
+#               because nothing in the stack asks Wayfinder for it.
+#
+# The three that are read this way, none of them needed for an ordinary deploy:
+#
+#   FORCE_BUILD=1     Build and push the image even though this RELEASE is
+#                     already in ECR. What you want while iterating by hand.
+#   SOURCE_BUCKET=... Copy the web app from another instance's bucket rather
+#                     than building it here, for a machine with no node.
+#   EXPECT_ORDER_ID=  An order id the smoke check asserts is still listed,
+#                     which is how a deploy over a live instance shows the
+#                     data already there survived it.
 #
 # Deploy it yourself with:
 #   wf up -f Wayfinder.yaml -i ${{ .Inputs.serviceName }}-dev -w <workspace> -e <environment> \
 #     --identity <workspace>/<environment>/aws-<environment> --region <region> \
-#     --env-var RELEASE=$(git rev-parse --short HEAD)
+#     --env-var RELEASE=$(git describe --always --dirty)
+#
+# `git describe --always --dirty` gives a changed tree its own RELEASE, so the
+# image for it is built rather than skipped. Deploying the same RELEASE twice
+# from a changed tree keeps the image already in ECR unless you set
+# FORCE_BUILD=1.
 apiVersion: v1
 name: ${{ .Inputs.serviceName }}
 description: "${{ .Inputs.description }}"
@@ -30,43 +51,36 @@ components:
       - name: hash_key
         value: order_id
 
-  # This service's own registry, created and destroyed with the rest of the
-  # stack. Every pull request preview therefore gets one of its own, and nothing
-  # has to exist before the first deploy — which is the whole point: there is no
-  # registry address to know in advance, and no registry credential to store.
+  # Makes sure the image for this RELEASE is in ECR, and builds it only if it is
+  # not. Everything it does is in .wayfinder/ensure-image.sh, including creating
+  # the one repository this service uses the first time anything deploys.
   #
-  # MUTABLE because the same RELEASE is pushed repeatedly while iterating by
-  # hand; force_delete because a preview's registry has images in it when the
-  # pull request closes and the stack is destroyed.
-  registry:
-    type: CloudResource
-    plan: file:plans/aws-ecr.yaml
-    inputs:
-      - name: force_delete
-        value: true
-      - name: image_tag_mutability
-        value: MUTABLE
-
-  # Builds the image and pushes it. `withAccess` names a target on the
-  # deployment rather than a component, so this action runs with the deployment
-  # identity's own credentials — the same identity Terraform uses, and no access
-  # key anywhere.
+  # Skipping the build is what lets a machine with no docker deploy a release
+  # someone else built. Set FORCE_BUILD=1 in your environment to build anyway.
+  #
+  # `withAccess` names a target on the deployment rather than a component, so
+  # this action runs with the deployment identity's own credentials — the same
+  # identity Terraform uses, and no access key anywhere.
   pushimage:
     type: LocalAction
-    needs: [registry]
     withAccess:
       - targetName: cloud
     localAction:
       run: |-
-        aws ecr get-login-password --region $${{ .Cloud.Region }} \
-          | docker login --username AWS --password-stdin $${{ .Components.registry.repository_url }}
-        make image RELEASE=${RELEASE}
-        docker tag ${{ .Inputs.serviceName }}:${RELEASE} $${{ .Components.registry.repository_url }}:${RELEASE}
-        docker push $${{ .Components.registry.repository_url }}:${RELEASE}
+        .wayfinder/ensure-image.sh \
+          ${{ .Inputs.serviceName }} \
+          $${{ .Cloud.AWS.Account }}.dkr.ecr.$${{ .Cloud.Region }}.amazonaws.com/${{ .Inputs.serviceName }} \
+          ${RELEASE} \
+          $${{ .Cloud.Region }}
 
   # The function. Its workload identity is granted read-write on `db`; Wayfinder
   # turns that one line into the IAM policy on the execution role, and
   # ORDERS_TABLE tells the code which table it landed on.
+  #
+  # The image address is spelled out rather than read from a component output.
+  # An ECR registry is per account and is always there, and the repository is
+  # named after the service, so the address follows from the account, the region
+  # and the name — and nothing has to be deployed before it is known.
   api:
     type: CloudResource
     plan: file:plans/aws-lambda-go-handler.yaml
@@ -79,7 +93,7 @@ components:
       - name: suffix
         value: api
       - name: container_image_uri
-        value: "$${{ .Components.registry.repository_url }}:${RELEASE}"
+        value: "$${{ .Cloud.AWS.Account }}.dkr.ecr.$${{ .Cloud.Region }}.amazonaws.com/${{ .Inputs.serviceName }}:${RELEASE}"
     terraform:
       tfVarsTemplate: |-
         env = {
@@ -131,7 +145,12 @@ components:
       - name: api_gateway_endpoint
         value: "$${{ .Components.apigateway.api_endpoint }}"
 
-  # Builds the web app and puts it in the bucket CloudFront serves.
+  # Puts this RELEASE's web app in the bucket CloudFront serves, building it
+  # only if the bucket does not already hold it. Everything it does is in
+  # .wayfinder/deploy-web.sh.
+  #
+  # Set SOURCE_BUCKET in your environment to copy another instance's build
+  # across instead, so a machine with no node can deploy too.
   deployweb:
     type: LocalAction
     needs: [web]
@@ -139,8 +158,23 @@ components:
       - targetName: cloud
     localAction:
       run: |-
-        make web
-        aws s3 sync web/dist s3://$${{ .Components.web.spa_bucket_id }}/ --delete --sse
-        aws cloudfront create-invalidation \
-          --distribution-id $${{ .Components.web.distribution_id }} \
-          --paths "/*"
+        .wayfinder/deploy-web.sh \
+          $${{ .Components.web.spa_bucket_id }} \
+          $${{ .Components.web.distribution_id }} \
+          ${RELEASE} \
+          $${{ .Cloud.Region }}
+
+  # Asks the deployed instance for an answer: healthz reports ok, and an order
+  # placed through the public URL comes back when the orders are listed. A
+  # deploy that finishes with a broken API fails here rather than being called
+  # a success.
+  #
+  # No `withAccess`: it only uses the public URL, so it needs no cloud
+  # credentials and is given none.
+  smoke:
+    type: LocalAction
+    needs: [deployweb]
+    localAction:
+      run: |-
+        make smoke URL=https://$${{ .Components.web.cloudfront_url }} \
+          EXPECT_ORDER_ID="$${EXPECT_ORDER_ID:-}"
