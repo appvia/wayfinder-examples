@@ -1,4 +1,4 @@
-# CI and the stack's `pushimages` component call `make test`, `make lint`,
+# CI and the stack's `pushimage` component call `make test`, `make lint`,
 # `make build`, `make image` and `make web` — nothing else. That is deliberate:
 # how this service is built belongs here, not in .github/workflows/ or
 # Wayfinder.yaml.
