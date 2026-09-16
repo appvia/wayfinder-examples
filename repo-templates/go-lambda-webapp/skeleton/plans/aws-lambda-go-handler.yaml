@@ -2,7 +2,7 @@ apiVersion: cloudresources/v3
 kind: CloudResourcePlan
 metadata:
   name: aws-lambda-go-handler
-  version: "1.1.1"
+  version: "1.2.0"
 spec:
   cloud: aws
   description: "Multi-instance Go Lambda handler. Suffix combined with stack+instance yields unique function names. Optional SNS subscriptions and per-handler env vars supported."
@@ -84,7 +84,11 @@ spec:
             # Container image configuration
             create_package = false
             package_type   = "Image"
-            image_uri      = ${{ .Inputs.container_image_uri | quote }}
+            # Either a full image URI, or a repository name and tag in this account's own
+            # ECR registry, whose address follows from the account and region the plan is
+            # deploying into. The second form is what lets a stack name its image without
+            # knowing its account id.
+            image_uri      = ${{ if .Inputs.container_image_uri }}${{ .Inputs.container_image_uri | quote }}${{ else }}"${{ .Cloud.AWS.Account }}.dkr.ecr.${{ .Cloud.Region }}.amazonaws.com/${{ .Inputs.image_repository }}:${{ .Inputs.image_tag }}"${{ end }}
 
             # Runtime configuration
             timeout     = ${{ .Inputs.timeout | default 30 }}
@@ -185,9 +189,20 @@ spec:
       type: string
       optional: false
     - name: container_image_uri
-      description: "URI of the container image to deploy as the Lambda function."
+      description: "Full URI of the container image to deploy. Leave empty to name the image by image_repository and image_tag in this account's ECR registry instead."
       type: string
-      optional: false
+      optional: true
+      defaultValue: ""
+    - name: image_repository
+      description: "ECR repository name in the deploying account, used with image_tag when container_image_uri is empty."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: image_tag
+      description: "Image tag in image_repository, used when container_image_uri is empty."
+      type: string
+      optional: true
+      defaultValue: ""
     - name: sns_subscription_arns
       description: "SNS topic ARNs this Lambda should subscribe to. For each ARN an aws_sns_topic_subscription and aws_lambda_permission are created. Defaults to no subscriptions."
       type: list(string)
