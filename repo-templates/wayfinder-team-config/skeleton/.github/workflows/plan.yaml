@@ -9,6 +9,11 @@
 # a pull-request branch CANNOT apply even if this workflow were changed to try.
 # The worst a malicious pull request can do here is print a plan.
 #
+# The roles the team's own identities assume are planned the same way, against every
+# environment that already has a vended account, before the manifests are. On merge
+# that order is what makes an identity verifiable: an ExternalIdentity naming a role
+# that does not exist gives up after about ten attempts and nothing retries it.
+#
 # This file is copied into your repository verbatim — Wayfinder does not template
 # it. Per-repository values live in .wayfinder/ci.env; per-installation values are
 # GitHub repository or organisation variables.
@@ -35,8 +40,8 @@ jobs:
     container:
       image: quay.io/appvia-wf-dev/wftoolbox:latest
     # A container job's default shell is `sh`, not the `bash` a runner gives you,
-    # and the vend step below builds its flags in an array - which `sh` rejects
-    # outright with a syntax error rather than misreading it.
+    # and both of this job's script steps build their arguments in an array - which
+    # `sh` rejects outright with a syntax error rather than misreading it.
     defaults:
       run:
         shell: bash
@@ -46,7 +51,15 @@ jobs:
       - name: Load the repository's Wayfinder context
         run: grep -E '^[A-Z][A-Z0-9_]*=' .wayfinder/ci.env >> "$GITHUB_ENV"
 
-      - name: Plan
+      # This step also writes down which environments have an account, which the Plan
+      # step reads to decide whether an unfilled identities manifest is a wait or a
+      # fault.
+      #
+      # The env block is repeated on each step rather than set on the job: a job's
+      # own env is evaluated before any step runs, so WF_SERVER and the rest -
+      # written to $GITHUB_ENV by "Load the repository's Wayfinder context" -
+      # would all be empty there.
+      - name: Plan the roles the team's identities assume
         env:
           # The GitHub variable wins over the scaffold-time value, so one
           # installation-wide setting covers every repository. Both blank leaves
@@ -56,6 +69,60 @@ jobs:
           # Fully qualified: tenant:workspace:name.
           WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
         run: |
-          wf apply -w "${WF_WORKSPACE}" -f ./manifests/ \
+          set -euo pipefail
+          : > "${RUNNER_TEMP}/vended-envs"
+
+          for env in $(yq -r '.environments | keys | .[]' environments.yaml); do
+            if ! wf get externalidentity "aws-${env}" -w "${WF_WORKSPACE}" -e "${env}" >/dev/null 2>&1; then
+              echo "::notice::${env} has no vended account yet - ask your platform team to vend one against it"
+              continue
+            fi
+            echo "${env}" >> "${RUNNER_TEMP}/vended-envs"
+
+            region=$(yq -r ".environments.\"${env}\".region" environments.yaml)
+            wf deploy -f access/Wayfinder.yaml -i access \
+              -w "${WF_WORKSPACE}" -e "${env}" \
+              --identity "${WF_WORKSPACE}/${env}/aws-${env}" \
+              --region "${region}" \
+              --dry-run --non-interactive
+          done
+
+      - name: Plan
+        env:
+          WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER || env.WF_SERVER }}
+          WAYFINDER_TENANT: ${{ env.WF_TENANT }}
+          WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
+        run: |
+          set -euo pipefail
+
+          files=()
+          for f in manifests/*.yaml manifests/*.yml; do
+            [ -e "${f}" ] || continue
+
+            # Only an identities manifest ships with the account id left blank, and
+            # only its body counts: the file's own header explains the placeholder,
+            # so matching comments too would hold a filled-in file back for ever.
+            case "${f}" in
+              manifests/identities-*)
+                if grep -v '^[[:space:]]*#' "${f}" | grep -q ACCOUNT_ID; then
+                  env=${f#manifests/identities-}
+                  env=${env%.*}
+                  if grep -qxF "${env}" "${RUNNER_TEMP}/vended-envs"; then
+                    echo "::error file=${f}::${env} has a vended account and this file still says ACCOUNT_ID. Replace every one with the account id - 'wf get externalidentity aws-${env} -w ${WF_WORKSPACE} -e ${env} -o yaml' prints it under spec.aws.account."
+                    exit 1
+                  fi
+                  # Leaving it out of a --prune plan reports no deletion: an identity
+                  # in it could only have been created once the account existed, and the
+                  # vended-account check stops the run before that could be undone.
+                  echo "::notice file=${f}::${env} has no vended account yet, so this file is left out of the plan."
+                  continue
+                fi
+                ;;
+            esac
+
+            files+=(-f "${f}")
+          done
+
+          wf apply -w "${WF_WORKSPACE}" "${files[@]}" \
             --owner "${WF_OWNER}" \
             --prune --dry-run server

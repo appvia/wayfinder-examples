@@ -13,18 +13,23 @@ platform configuration. Change it by pull request.
 
 | Path | What it is |
 |---|---|
-| `environments.yaml` | The environment-to-account map. Decides what gets **vended** |
-| `manifests/` | Environments, and the role bindings saying who may deploy into them. Decides what **exists** in Wayfinder |
+| `environments.yaml` | The environment-to-account map. Decides which accounts you need **vended** |
+| `manifests/` | Environments, the role bindings saying who may deploy into them, and this team's own identities. Decides what **exists** in Wayfinder |
+| `access/` | The IAM roles those identities assume, as a stack deployed into each vended account |
 | `.wayfinder/ci.env` | The values that identify this repository to Wayfinder |
 | `.github/workflows/plan.yaml` | On a pull request: says what would change |
-| `.github/workflows/apply.yaml` | On merge to `main`: applies, then vends any missing account |
+| `.github/workflows/apply.yaml` | On merge to `main`: creates the roles, then applies the manifests |
 
 ## How a change reaches the platform
 
-1. Open a pull request. `plan.yaml` runs `wf apply --prune --dry-run server` and reports
-   what would be created, changed and **removed**.
-2. Merge. `apply.yaml` applies for real with `--prune`, then reads the environment map and
-   vends a cloud account for any environment that does not have one yet.
+1. Open a pull request. `plan.yaml` dry-runs `access/Wayfinder.yaml` against every
+   environment that has an account, then runs `wf apply --prune --dry-run server` and
+   reports what would be created, changed and **removed**.
+2. Merge. `apply.yaml` does the same two steps for real.
+
+**The order is not cosmetic.** An `ExternalIdentity` naming an IAM role that does not
+exist stops trying to verify after about ten attempts, and nothing retries it afterwards —
+so the roles are created first, every time.
 
 `--prune` means **removing a manifest removes the object.** It is scoped to what this
 repository owns, so it cannot reap anything else — but within that scope, deleting a file
@@ -36,17 +41,33 @@ Add it to **both** `environments.yaml` and `manifests/`. The map says where it d
 manifests say that it exists. Then add a `deployer` role binding per person who should
 reach it, following the `${{ .Inputs.firstEnvironment }}` pattern.
 
-Whether that vends a new cloud account depends on the `account` value: a new one vends, an
-existing one does not. Two environments can share an account deliberately.
+Whether you need a new cloud account depends on the `account` value: a new one does, an
+existing one does not. Two environments can share an account deliberately. Ask your
+platform team to vend the ones you do not have — `environments.yaml` is what you point
+them at.
 
-## What must never be in this repository
+## Your own identities
 
-- **`ExternalIdentity` objects.** A team can change its own platform configuration but
-  cannot grant itself cloud access. Identities live with the platform, and their grant
-  names the `deployer` role in an environment — `manifests/bindings.yaml` is what
-  decides who holds it.
-- **Cloud account ids, role ARNs, or any estate identifier.** Wayfinder is the broker and
-  holds those.
+**A team may grant access within the accounts vended to it, and nowhere else.**
+
+You already hold administrator access in your accounts, through the `aws-<environment>`
+identity the vend created. So declaring more identities into one of them widens nothing:
+an identity can only trust a role you are able to create, in an account you already
+administer. What you still cannot do is reach another team's account or edit the
+platform's identities.
+
+Two pieces, and a new identity needs both in the same pull request:
+
+| | |
+|---|---|
+| `access/Wayfinder.yaml` | The IAM role, its trust policy and its permissions |
+| `manifests/identities-<environment>.yaml` | The `ExternalIdentity` naming that role, and who may use it |
+
+The role's name and ARN are decided by the plan, not discovered, so the manifest writes
+them out. **Fill in `ACCOUNT_ID` after the account is vended**, in the same pull request
+that records it in `environments.yaml`. Until then CI leaves the file out of `wf apply`
+and says so; once the environment has an account and the placeholder is still there, CI
+fails instead.
 
 ## Authentication
 

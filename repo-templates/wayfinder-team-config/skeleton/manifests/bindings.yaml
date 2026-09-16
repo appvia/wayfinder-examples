@@ -18,14 +18,15 @@
 # `metadata.environment` together confine it to that one environment. There is no
 # `scope:` field; moving the binding is how you change its reach.
 #
-# Note what is NOT here, and must never be: `ExternalIdentity` objects. The line this
-# repository holds is that a team can change its own platform configuration but cannot
-# grant itself cloud access. A team able to edit an identity's `usableBy` could grant
-# itself production, so identities live with the platform and only the GRANT names the
-# role bound here.
+# The line this repository holds is that a team may grant access WITHIN THE ACCOUNTS
+# VENDED TO IT, and nowhere else. It already holds administrator access in those
+# accounts through `aws-<environment>`, so the identities in identities-*.yaml widen
+# nothing: an identity can only trust a role the team is able to create, in an account
+# it already administers. What it still cannot do is reach another team's account or
+# edit the platform's own identities.
 #
-# Also never here: cloud account ids, role ARNs, or any other estate identifier.
-# Wayfinder is the broker and holds those.
+# So a cloud account id and a role ARN do belong here, in identities-*.yaml - but only
+# ever this team's own.
 apiVersion: org/v3
 kind: RoleBinding
 metadata:

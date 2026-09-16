@@ -22,14 +22,19 @@ which Wayfinder reads once it has followed that pointer. See
 
 ## The idea
 
-**A team can change its own platform configuration but cannot grant itself cloud
-access.** That one line decides everything in the skeleton.
+**A team may grant access within the accounts vended to it, and nowhere else.** That
+one line decides everything in the skeleton.
 
-Environments and role bindings live in the team's repository, so the team changes
-them by pull request without asking anyone. `ExternalIdentity` objects never do —
-an identity's `usableBy` is what decides who reaches a cloud account, so a team
-able to edit one could grant itself production. Identities stay with the platform
-team.
+Environments, role bindings and the team's own identities live in the team's
+repository, so the team changes them by pull request without asking anyone. The
+identities are not a hole in that: the team already holds administrator access in its
+vended account, through the `aws-<environment>` identity the vend created. Declaring
+more identities into that account widens nothing — an identity can only trust a role
+the team is able to create, in an account it already administers. What the team still
+cannot do is reach another team's account, or edit the platform's identities.
+
+What it cannot do at all is *get* an account. Vending stays with the platform team,
+and `environments.yaml` is the record of what this team is asking for.
 
 **Roles are assigned to people directly, not through a group.** The vending
 workflow grants the vended identity to `role:deployer@<workspace>/<environment>` —
@@ -56,16 +61,57 @@ Environments are many-to-one onto accounts, so `test` and `nonprod` can share on
 Adding an environment on an existing account vends nothing; adding one on a new
 account vends. Nobody encodes that rule — it falls out of the map.
 
+## The team's own identities
+
+`access/` and `manifests/identities-<environment>.yaml` are two halves of one thing,
+and a new identity needs both in the same pull request:
+
+- **`access/plans/aws-wayfinder-roles.yaml`** creates an IAM role per identity,
+  `wf-<workspace>-<environment>-<name>`, trusting only the OIDC subject Wayfinder will
+  present for the identity of that name. `access/Wayfinder.yaml` is the stack that
+  deploys it, through the environment's own `aws-<environment>` identity.
+- **`manifests/identities-<environment>.yaml`** creates the `ExternalIdentity` naming
+  that role, and says who may use it.
+
+Nothing flows from the Terraform into the manifest. A role's name and ARN follow from
+the account id and a name the team chose, so the manifest writes them out — which is
+also why the manifest ships with the literal `ACCOUNT_ID`: the repository is scaffolded
+before the account is vended, so there is no id to write yet.
+
+The two starters are `aws-readonly`, granted to whoever holds `deployer` in the
+environment, and `module-upgrade-inspector`, granted to the `module-upgrade-prove` AI
+agent alone. Both are `usableFor: [directaccess]` and neither is `tfprovisioning`, so
+neither can be deployed through.
+
 ## What the CI does
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `plan.yaml` | pull request | `wf apply --prune --dry-run server` — reports what would be created, changed and removed |
-| `apply.yaml` | merge to `main` | applies with `--prune --confirm` |
+| `plan.yaml` | pull request | dry-runs `access/Wayfinder.yaml` per environment, then `wf apply --prune --dry-run server` |
+| `apply.yaml` | merge to `main` | deploys `access/Wayfinder.yaml` per environment, then applies with `--prune --confirm` |
+
+**The roles come before the manifests, and that order is not cosmetic.** An
+`ExternalIdentity` naming an IAM role that does not exist stops trying to verify after
+about ten attempts, and nothing retries it afterwards — so a manifest applied first
+would sit unverified until somebody noticed.
+
+Both jobs read `environments.yaml` and skip any environment whose `aws-<environment>`
+identity does not exist yet, printing that it has no vended account. An identities
+manifest still carrying `ACCOUNT_ID` is left out of the apply the same way — but if
+that environment *does* have an account, the job fails instead and names the file.
+Failing rather than skipping is what makes leaving it out safe: `--prune` reaps owned
+objects absent from the fileset, so a file that is silently dropped after it has been
+applied once would delete the identities in it.
 
 The plan is trustworthy rather than advisory because of the credential, not the
 command: the CI service account's federated trust is pinned to `refs/heads/main`,
 so a pull-request branch cannot apply even if the workflow were edited to try.
+
+The CI service account needs nothing beyond what onboarding already gives it.
+`workspace.manager` in the team's workspace includes `deployer` — so it holds
+`deployer` in every environment, which is the role the vend grants the
+`aws-<environment>` identity to — and `externalidentities.management`, which permits
+creating an `ExternalIdentity` at environment scope.
 
 **This repository does not vend cloud accounts.** An account is granted by the
 platform team, who run their vending workflow against one of your environments.

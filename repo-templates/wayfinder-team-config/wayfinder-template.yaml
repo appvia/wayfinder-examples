@@ -93,3 +93,9 @@ skeleton:
     # which is rendered.
     - ".github/workflows/*.yaml"
     - ".github/workflows/*.yml"
+
+    # A CloudResourcePlan is Wayfinder's own template language from end to end, and
+    # every expression in it is meant to be evaluated when the plan is deployed.
+    # Rendering it here would consume them all, leaving the scaffolded repository with a
+    # plan whose tenant, workspace and environment were fixed the day it was created.
+    - "access/plans/*.yaml"

@@ -1,0 +1,44 @@
+# The roles the team's own Wayfinder identities assume in its vended AWS accounts.
+#
+# Deployed once per environment, through that environment's `aws-<environment>` identity
+# - the one the vend granted to whoever holds `deployer` there. So this reaches exactly
+# the accounts the team was given and nothing else.
+#
+# It runs BEFORE the manifests apply, in both CI jobs. An ExternalIdentity naming a role
+# that does not exist gives up verifying after about ten attempts, and nothing retries
+# it afterwards - so a manifest applied first would sit unverified until somebody
+# noticed.
+#
+# `plan: file:` reads the plan from this repository at deploy time and versions it by the
+# plan file's content, so editing the plan is the whole change - there is no version here
+# to keep in step.
+apiVersion: v1
+name: ${{ .Inputs.team }}-access
+description: IAM roles in this team's vended AWS accounts, one per Wayfinder identity the team declares.
+
+components:
+  roles:
+    type: CloudResource
+    plan: file:plans/aws-wayfinder-roles.yaml
+    inputs:
+      # The instance this repository's CI talks to. Blank at scaffold time means the
+      # Wayfinder SaaS API, which is the CLI's own default.
+      - name: issuer_url
+        value: "${{ if .Inputs.wayfinderServer }}${{ .Inputs.wayfinderServer }}${{ else }}https://api.on.wayfinder.run${{ end }}"
+
+      # Two to start with. Add an entry, add a matching ExternalIdentity manifest, and
+      # the pair is a pull request.
+      - name: identities
+        value:
+          # Read the account without being able to change it - for looking at what is
+          # there when something is wrong.
+          - name: aws-readonly
+            managedPolicyArns:
+              - arn:aws:iam::aws:policy/ReadOnlyAccess
+
+          # This role never grows. Proof that a module upgrade is safe is read-only
+          # access, plus Terraform's own log, plus the application's own smoke test - so
+          # a request to add a write permission here is a request to stop proving it.
+          - name: module-upgrade-inspector
+            managedPolicyArns:
+              - arn:aws:iam::aws:policy/ReadOnlyAccess
