@@ -10,19 +10,24 @@
 #   1. `environment: production` — GitHub's own gate. Configure reviewers and
 #      wait timers on the environment. It also scopes the OIDC token to
 #      `repo:<owner>/<repo>:environment:production`, which is what the
-#      production service account credential trusts, so a job that skipped the
-#      reviewers would be refused a token, not merely warned about in the UI.
+#      production service account trusts, so a job that skipped the reviewers
+#      would be refused a token, not merely warned about in the UI.
 #
 #   2. `--require-approval` — Wayfinder's gate on the infrastructure plan. Each
 #      CloudResource is planned and pauses for approval. Opt in by setting the
 #      WF_PROD_REQUIRE_APPROVAL variable to `true`.
+#
+# Production can deploy through a different cloud account, region or DNS zone
+# from the rest: set WF_IDENTITY, WF_REGION or WF_DNS_ZONE on the production
+# environment and that value wins over the repository-wide one.
 #
 # The image is built by the stack's `pushimage` component rather than here — see
 # the note at the top of ci.yaml for why that means this job runs on a plain
 # ubuntu runner and not in a container.
 #
 # This file is copied into your repository verbatim — Wayfinder does not
-# template it. Per-repository values live in .wayfinder/ci.env.
+# template it. The deploy job reads the WAYFINDER_* variables Wayfinder set on
+# the production environment when it created this repository.
 name: Deploy to production
 
 on:
@@ -36,9 +41,6 @@ permissions:
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
-
-env:
-  WAYFINDER_SERVER: ${{ vars.WF_SERVER }}
 
 jobs:
   test:
@@ -69,6 +71,13 @@ jobs:
     needs: [test]
     runs-on: ubuntu-latest
     environment: production
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_SERVICE_ACCOUNT }}
+      WAYFINDER_ENVIRONMENT: ${{ vars.WAYFINDER_ENVIRONMENT }}
+      WF_REGION: ${{ vars.WF_REGION }}
+      WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+      WF_DNS_ZONE: ${{ vars.WF_DNS_ZONE }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -77,24 +86,13 @@ jobs:
       - name: Install the Wayfinder CLI
         run: .wayfinder/install-wf.sh
 
-      - name: Resolve the Wayfinder context
-        run: .wayfinder/ci-env.sh prod
-        env:
-          WF_WORKSPACE_VAR: ${{ vars.WF_WORKSPACE }}
-          # Production may live in a different account, region or DNS zone. Each
-          # falls back to the shared value when no _PROD override is set, and
-          # the identity falls back further to the one an account vend created
-          # for the production environment.
-          WF_IDENTITY: ${{ vars.WF_IDENTITY_PROD || vars.WF_IDENTITY }}
-          WF_REGION: ${{ vars.WF_REGION_PROD || vars.WF_REGION }}
-          WF_DNS_ZONE: ${{ vars.WF_DNS_ZONE_PROD || vars.WF_DNS_ZONE }}
-
       - name: Verify the Wayfinder identity
         run: wf whoami
 
-      # Guards against a misconfigured WF_SERVER pointing production traffic at
-      # the wrong Wayfinder installation. Set WF_EXPECT_INSTANCE_ID to the value
-      # of `wf serverinfo -o json | jq -r .instanceIdentifier` for production.
+      # Guards against a misconfigured WAYFINDER_SERVER pointing production
+      # traffic at the wrong Wayfinder installation. Set WF_EXPECT_INSTANCE_ID
+      # to the value of `wf serverinfo -o json | jq -r .instanceIdentifier` for
+      # production.
       - name: Verify the Wayfinder installation
         if: vars.WF_EXPECT_INSTANCE_ID != ''
         env:
@@ -114,7 +112,20 @@ jobs:
           APPROVAL_TIMEOUT: ${{ vars.WF_PROD_APPROVAL_TIMEOUT }}
         run: |
           set -euo pipefail
-          mapfile -t args < "${WF_DEPLOY_ARGS_FILE}"
+          source .wayfinder/ci.env
+
+          # The cloud identity sits in the same workspace as the service
+          # account, which is the middle segment of tenant:workspace:name.
+          workspace="$(cut -d: -f2 <<<"${WAYFINDER_SERVICE_ACCOUNT}")"
+          args=(
+            --identity "${WF_IDENTITY:-${workspace}/${WAYFINDER_ENVIRONMENT}/aws-${WAYFINDER_ENVIRONMENT}}"
+            --region "${WF_REGION}"
+          )
+          # Without a zone the web app answers on CloudFront's own
+          # *.cloudfront.net domain, which needs no Route53 zone.
+          if [[ -n "${WF_DNS_ZONE:-}" ]]; then
+            args+=(--dns-zone "${WF_DNS_ZONE}")
+          fi
 
           if [[ "${REQUIRE_APPROVAL:-false}" == "true" ]]; then
             args+=("--require-approval")
@@ -123,9 +134,14 @@ jobs:
             fi
           fi
 
+          # One long-lived instance, redeployed on every tag. The name is
+          # passed on to the step that writes the summary.
+          instance="${WF_SERVICE_NAME}-prod"
+          echo "WF_INSTANCE=${instance}" >> "$GITHUB_ENV"
+
           set +e
           wf deploy --non-interactive --timeout 45m \
-            -i "${WF_INSTANCE}" \
+            -i "${instance}" \
             -e "${WAYFINDER_ENVIRONMENT}" \
             -f Wayfinder.yaml \
             --env-var RELEASE="${RELEASE}" \
@@ -144,7 +160,7 @@ jobs:
               echo "### :hourglass: ${RELEASE} is awaiting approval"
               echo ""
               echo "No changes were applied. Review the plan above, approve it with"
-              echo "\`wf approve cloudresource <name> -w ${WAYFINDER_WORKSPACE} -e ${WAYFINDER_ENVIRONMENT}\`,"
+              echo "\`wf approve cloudresource <name> -w ${workspace} -e ${WAYFINDER_ENVIRONMENT}\`,"
               echo "then re-run this job."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 3

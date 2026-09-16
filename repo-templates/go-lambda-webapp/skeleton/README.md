@@ -17,7 +17,7 @@ Wayfinder turns that into the workload's own permissions.
 | `web/` | The single-page app |
 | `Wayfinder.yaml` | The stack: the table, the image, the function, the gateway, the web app and a check that it answers |
 | `plans/` | The CloudResourcePlans the stack deploys. Yours to edit |
-| `.wayfinder/` | `ci.env` (this repository's identity), the scripts CI runs, and the two the stack's actions run |
+| `.wayfinder/` | `ci.env` (the service name and the `wf` build CI installs), the script CI runs, and the two the stack's actions run |
 | `.github/workflows/` | A preview per pull request, `develop` on merge, production on a tag |
 
 ## The stack
@@ -111,18 +111,33 @@ something to build, which the runner already has.
 
 ### What CI needs
 
-Repository or organisation variables:
+Nothing to set up by hand. Wayfinder created one service account per
+environment, the `preview`, `develop` and `production` GitHub environments, and
+these variables, when it created this repository:
+
+| Variable | Set on | |
+| --- | --- | --- |
+| `WAYFINDER_SERVER` | The repository | Your Wayfinder API URL |
+| `WF_REGION` | The repository | The AWS region to deploy into, e.g. `eu-west-2` |
+| `WAYFINDER_SERVICE_ACCOUNT` | Each environment | The account that job signs in as, as `tenant:workspace:name` |
+| `WAYFINDER_ENVIRONMENT` | Each environment | The Wayfinder environment that job deploys to |
+
+No credential is stored anywhere. A job declares `environment: preview`,
+`develop` or `production`; GitHub mints an OIDC token naming that environment,
+and `wf` exchanges it for the account in `WAYFINDER_SERVICE_ACCOUNT`, which
+trusts that one subject and no other. So the account a pull request can use
+cannot deploy to production, and a job that does not declare its environment
+cannot sign in at all. The tenant and workspace come from the reference, so
+there is nothing else to tell `wf`.
+
+Two more variables are yours, and neither is required:
 
 | Variable | |
 | --- | --- |
-| `WF_SERVER` | Your Wayfinder API URL |
-| `WF_REGION` | The AWS region to deploy into, e.g. `eu-west-2` |
-| `WF_IDENTITY` | Optional. Defaults to `<workspace>/<environment>/aws-<environment>`, which is what an account vend creates |
-| `WF_DNS_ZONE` | Optional. Without one the web app answers on CloudFront's own `*.cloudfront.net` domain |
-| `WF_WORKSPACE` | Only when `.wayfinder/ci.env` leaves the workspace blank |
+| `WF_IDENTITY` | The cloud identity Wayfinder deploys through. Without it, `<workspace>/<environment>/aws-<environment>`, which is what an account vend creates |
+| `WF_DNS_ZONE` | Without one the web app answers on CloudFront's own `*.cloudfront.net` domain |
 
-Three service accounts, one per environment, each trusting a different GitHub
-OIDC subject so a credential a pull request can use cannot reach production:
-`${{ .Inputs.serviceName }}-ci-preview`, `${{ .Inputs.serviceName }}-ci-develop`
-and `${{ .Inputs.serviceName }}-ci-prod`. `repo-templates/setup-ci-service-accounts.sh`
-in appvia/wayfinder-examples creates them.
+Set either on the repository and every deployment uses it; set it on one
+environment as well and that environment uses its own, because an environment's
+value wins over the repository's. `WF_REGION` behaves the same way, so
+production can deploy to a different region from `develop`.
