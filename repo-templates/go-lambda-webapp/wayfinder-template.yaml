@@ -81,7 +81,7 @@ ci:
       roles:
         - role: deployer
           workspace: ${{ .Workspace }}
-          env: ${{ .Inputs.previewEnvironment }}
+          environment: ${{ .Inputs.previewEnvironment }}
         # Wayfinder.yaml names its plans as file:plans/..., which publishes each
         # one to the workspace catalogue as it deploys - including on the dry run
         # a pull request does.
@@ -95,7 +95,7 @@ ci:
       roles:
         - role: deployer
           workspace: ${{ .Workspace }}
-          env: ${{ .Inputs.developEnvironment }}
+          environment: ${{ .Inputs.developEnvironment }}
         - role: workspace.cataloguemanagement
           workspace: ${{ .Workspace }}
       trust:
@@ -106,7 +106,7 @@ ci:
       roles:
         - role: deployer
           workspace: ${{ .Workspace }}
-          env: ${{ .Inputs.prodEnvironment }}
+          environment: ${{ .Inputs.prodEnvironment }}
         - role: workspace.cataloguemanagement
           workspace: ${{ .Workspace }}
       trust:
@@ -124,21 +124,21 @@ repository:
       value: ${{ .Inputs.region }}
 
     - name: WAYFINDER_SERVICE_ACCOUNT
-      value: ${{ .CI.ServiceAccounts.previewDeployer.Ref }}
+      value: ${{ .CI.WayfinderServiceAccounts.previewDeployer.Ref }}
       githubEnvironment: preview
     - name: WAYFINDER_ENVIRONMENT
       value: ${{ .Inputs.previewEnvironment }}
       githubEnvironment: preview
 
     - name: WAYFINDER_SERVICE_ACCOUNT
-      value: ${{ .CI.ServiceAccounts.developDeployer.Ref }}
+      value: ${{ .CI.WayfinderServiceAccounts.developDeployer.Ref }}
       githubEnvironment: develop
     - name: WAYFINDER_ENVIRONMENT
       value: ${{ .Inputs.developEnvironment }}
       githubEnvironment: develop
 
     - name: WAYFINDER_SERVICE_ACCOUNT
-      value: ${{ .CI.ServiceAccounts.prodDeployer.Ref }}
+      value: ${{ .CI.WayfinderServiceAccounts.prodDeployer.Ref }}
       githubEnvironment: production
     - name: WAYFINDER_ENVIRONMENT
       value: ${{ .Inputs.prodEnvironment }}
