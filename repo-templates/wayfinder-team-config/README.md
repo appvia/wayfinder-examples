@@ -33,8 +33,24 @@ more identities into that account widens nothing — an identity can only trust 
 the team is able to create, in an account it already administers. What the team still
 cannot do is reach another team's account, or edit the platform's identities.
 
-What it cannot do at all is *get* an account. Vending stays with the platform team,
-and `environments.yaml` is the record of what this team is asking for.
+**Where that line sits is the platform team's choice, and it is drawn in IAM, not
+here.** The policy on the vended `wf-deploy` role is the whole statement of what the
+team was permitted: `AdministratorAccess` includes creating roles, so it includes
+declaring identities; a policy without `iam:CreateRole` does not, and this
+repository's `access/` stack is then refused at deploy time rather than at review. In
+between sits a permissions boundary, which lets a team create roles while capping what
+any of them may do. A rule enforced by the cloud holds whichever tool the team uses,
+a laptop, this CI or an agent's sandbox, which is why Wayfinder does not enforce one
+of its own. An `ExternalIdentity` is only a pointer at a role: one that names a role
+the team could not create stays Unverified and grants nothing.
+
+The identity the vend delivered, `aws-<environment>`, is deliberately not in this
+repository. It was handed to the team, not declared by it, and keeping it out of
+`--prune`'s reach means a bad merge here cannot remove the grant this repository's
+own CI deploys through.
+
+What the team cannot do at all is *get* an account. Vending stays with the platform
+team, and `environments.yaml` is the record of what this team is asking for.
 
 **Roles are assigned to people directly, not through a group.** The vending
 workflow grants the vended identity to `role:deployer@<workspace>/<environment>` —
