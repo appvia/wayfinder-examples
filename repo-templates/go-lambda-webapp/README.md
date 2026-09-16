@@ -14,16 +14,49 @@ chart and needs a cluster to deploy it to. A team whose cloud account was vended
 for them has an account, a deployment identity and somewhere to keep Terraform
 state — and no cluster. This template is for that team.
 
-## Status: skeleton
+## What a repository from it deploys
 
-It renders a README and nothing else. The application and its stack are being
-built in a repository created from it, and will be back-filled here.
+Seven components, deployed in this order:
 
-That order is deliberate. A template is a repository with holes in it, so a
-failure in one has two possible causes — the code, or the render. Building the
-application somewhere those are separable means a broken deploy is a broken
-deploy. The render is only written once; the application is iterated on many
-times.
+```
+db ───────────────┐
+                  ▼
+pushimage ──────► api ─► apigateway ─► web ─► deployweb ─► smoke
+```
+
+`db` is the DynamoDB table, `api` the Lambda function, `apigateway` one
+`ANY /api/{proxy+}` route to it, and `web` the CloudFront distribution serving
+the single-page app on `/*` and forwarding `/api/*` to the gateway. The other
+three run on the machine doing the deploy.
+
+There is no ECR component. The registry is per account and always there, and
+the repository is named after the service, so the image address follows from the
+account, the region and the name, and nothing has to be deployed before it is
+known.
+
+### The three actions
+
+- **pushimage** runs `.wayfinder/ensure-image.sh`. It creates the service's ECR
+  repository the first time anything deploys — so two pull requests opened at
+  once cannot fail on a repository that is not there yet, the second create
+  being refused with `RepositoryAlreadyExistsException` — and builds and pushes
+  only when the `RELEASE` tag is missing from ECR.
+- **deployweb** runs `.wayfinder/deploy-web.sh`. It leaves a
+  `.release-<RELEASE>` object in the SPA bucket and skips everything when that
+  object is already there. Set `SOURCE_BUCKET` and it copies another instance's
+  build across rather than making one.
+- **smoke** runs `make smoke` against the public URL: `/api/healthz` reports ok,
+  and an order placed comes back when the orders are listed. It takes only
+  `curl` and `jq`, and is given no cloud credentials.
+
+Both scripts check before they act, which is what lets a machine with no docker
+and no node deploy a release someone else built — an agent working in a
+container, for instance.
+
+Because a `RELEASE` already in ECR is deployed rather than rebuilt, deploy by
+hand with `--env-var RELEASE=$(git describe --always --dirty)`, so an edited
+tree gets a `RELEASE` of its own. `FORCE_BUILD=1` in the environment pushes over
+one that is already there. CI passes the commit sha and is unaffected.
 
 | File | What it is |
 | --- | --- |
