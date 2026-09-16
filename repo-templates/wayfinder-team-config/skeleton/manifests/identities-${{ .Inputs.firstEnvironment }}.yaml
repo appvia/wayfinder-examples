@@ -1,0 +1,72 @@
+# The team's own identities in the ${{ .Inputs.firstEnvironment }} account.
+#
+# ── FILL IN ACCOUNT_ID BEFORE THIS CAN BE APPLIED ─────────────────────────────
+#
+# The account does not exist when this repository is scaffolded - the platform team vends
+# it afterwards, against this environment. So every ACCOUNT_ID in this file is a placeholder.
+# Replace all of them with the twelve-digit account id in the same pull request that
+# records the account in ../environments.yaml; `wf get externalidentity aws-${{ .Inputs.firstEnvironment }} -w ${{ .Inputs.workspace }} -e ${{ .Inputs.firstEnvironment }} -o yaml`
+# prints it under spec.aws.account once the vend has run.
+#
+# Until then CI leaves this file out of `wf apply` and says so. Once the environment has
+# an account and the placeholder is still here, CI fails instead: an environment with an
+# account and unapplied identities is a half-finished pull request, not a state to sit in.
+#
+# The role ARNs are written out rather than read back from Terraform. A role's name is
+# wf-<workspace>-<environment>-<identity>, decided in ../access/plans/aws-wayfinder-roles.yaml,
+# so there is nothing to discover - and no ordering between the two beyond the roles
+# existing first, which CI already guarantees.
+#
+# ── WHAT DECIDES WHO REACHES THESE ────────────────────────────────────────────
+#
+# `usableFor` is what an identity is for at all, and no grant can reach past it. Both of
+# these are `directaccess` only: they hand credentials to a person or an agent to use
+# themselves. Neither is `tfprovisioning`, so neither can be deployed through - that is
+# the `aws-${{ .Inputs.firstEnvironment }}` identity the vend created.
+#
+# `usableBy` then says who. A role grantee means "whoever holds this role here", and
+# bindings.yaml is what decides who that is.
+apiVersion: integrations/v3
+kind: ExternalIdentity
+metadata:
+  name: aws-readonly
+  workspace: ${{ .Inputs.workspace }}
+  environment: ${{ .Inputs.firstEnvironment }}
+spec:
+  type: AWSIAMRole
+  description: Read the ${{ .Inputs.firstEnvironment }} account without being able to change it.
+  aws:
+    account: "ACCOUNT_ID"
+    roleARN: arn:aws:iam::ACCOUNT_ID:role/wf-${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-aws-readonly
+    defaultRegion: ${{ .Inputs.region }}
+  usableFor:
+    - directaccess
+  usableBy:
+    # The scope fields of a role grantee are inert on an environment-scoped identity -
+    # this object's own workspace and environment are what the role is required in.
+    - role:
+        role: deployer
+---
+# Held by one AI agent and nobody else. Read-only is the whole of what proving a module
+# upgrade takes: what Terraform reports it would do, plus whether the application still
+# works afterwards. An agent that could also write could make the evidence agree with
+# itself.
+apiVersion: integrations/v3
+kind: ExternalIdentity
+metadata:
+  name: module-upgrade-inspector
+  workspace: ${{ .Inputs.workspace }}
+  environment: ${{ .Inputs.firstEnvironment }}
+spec:
+  type: AWSIAMRole
+  description: Read-only access for the module-upgrade-prove agent to check a resource survived an upgrade.
+  aws:
+    account: "ACCOUNT_ID"
+    roleARN: arn:aws:iam::ACCOUNT_ID:role/wf-${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-module-upgrade-inspector
+    defaultRegion: ${{ .Inputs.region }}
+  usableFor:
+    - directaccess
+  usableBy:
+    - subject:
+        kind: AIAgent
+        name: module-upgrade-prove
