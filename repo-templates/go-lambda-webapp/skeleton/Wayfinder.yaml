@@ -77,10 +77,10 @@ components:
   # turns that one line into the IAM policy on the execution role, and
   # ORDERS_TABLE tells the code which table it landed on.
   #
-  # The image address is spelled out rather than read from a component output.
-  # An ECR registry is per account and is always there, and the repository is
-  # named after the service, so the address follows from the account, the region
-  # and the name — and nothing has to be deployed before it is known.
+  # The image is named by repository and tag; the plan builds the registry address
+  # from the account and region it deploys into. An ECR registry is per account and
+  # is always there, and the repository is named after the service, so nothing has
+  # to be deployed before the image can be named.
   api:
     type: CloudResource
     plan: file:plans/aws-lambda-go-handler.yaml
@@ -92,8 +92,10 @@ components:
     inputs:
       - name: suffix
         value: api
-      - name: container_image_uri
-        value: "$${{ .Cloud.AWS.Account }}.dkr.ecr.$${{ .Cloud.Region }}.amazonaws.com/${{ .Inputs.serviceName }}:${RELEASE}"
+      - name: image_repository
+        value: ${{ .Inputs.serviceName }}
+      - name: image_tag
+        value: "${RELEASE}"
     terraform:
       tfVarsTemplate: |-
         env = {
