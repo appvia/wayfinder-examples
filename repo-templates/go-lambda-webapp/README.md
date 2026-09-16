@@ -4,6 +4,13 @@ A team's starting point for a service that runs on AWS Lambda rather than on a
 cluster: a Go API in a container behind API Gateway, a DynamoDB table, and a
 single-page web app served by CloudFront.
 
+A repository made from this template can deploy the moment it exists. Creating
+it also creates one Wayfinder service account per environment, the `preview`,
+`develop` and `production` GitHub environments, and the variables the workflows
+read — so nobody has to make an account, a federated credential or a role
+binding by hand, and a pull request's account cannot reach production.
+`skeleton/README.md` lists every variable and where it is set.
+
 It is the same delivery pipeline as the other golden paths — see
 [../DELIVERY-PIPELINE.md](../DELIVERY-PIPELINE.md) — so a pull request gets its
 own preview of the whole stack, merging deploys `develop`, and a `v*` tag deploys
@@ -60,7 +67,7 @@ one that is already there. CI passes the commit sha and is unaffected.
 
 | File | What it is |
 | --- | --- |
-| `wayfinder-template.yaml` | The template: its inputs, and which files are copied raw. |
+| `wayfinder-template.yaml` | The template: its inputs, the service accounts and GitHub variables scaffolding creates, and which files are copied raw. |
 | `RepoTemplate-go-lambda-webapp.yaml` | Registers the template with Wayfinder. |
 | `skeleton/` | Everything written into the generated repository. |
 

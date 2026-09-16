@@ -8,8 +8,8 @@
 # ubuntu runner and not in a container.
 #
 # This file is copied into your repository verbatim — Wayfinder does not
-# template it. Per-repository values live in .wayfinder/ci.env; per-installation
-# values are GitHub repository or organisation variables.
+# template it. The deploy job reads the WAYFINDER_* variables Wayfinder set on
+# the develop environment when it created this repository.
 name: Deploy to develop
 
 on:
@@ -23,9 +23,6 @@ permissions:
 concurrency:
   group: deploy-develop
   cancel-in-progress: false
-
-env:
-  WAYFINDER_SERVER: ${{ vars.WF_SERVER }}
 
 jobs:
   test:
@@ -54,28 +51,47 @@ jobs:
     needs: [test]
     runs-on: ubuntu-latest
     # Scopes the OIDC token to `repo:<owner>/<repo>:environment:develop`, which
-    # is what the develop service account credential trusts.
+    # is what the develop service account trusts, and shows this job the
+    # variables set on that environment.
     environment: develop
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_SERVICE_ACCOUNT }}
+      WAYFINDER_ENVIRONMENT: ${{ vars.WAYFINDER_ENVIRONMENT }}
+      WF_REGION: ${{ vars.WF_REGION }}
+      WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+      WF_DNS_ZONE: ${{ vars.WF_DNS_ZONE }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Install the Wayfinder CLI
         run: .wayfinder/install-wf.sh
 
-      - name: Resolve the Wayfinder context
-        run: .wayfinder/ci-env.sh develop
-        env:
-          WF_WORKSPACE_VAR: ${{ vars.WF_WORKSPACE }}
-          WF_IDENTITY: ${{ vars.WF_IDENTITY }}
-          WF_REGION: ${{ vars.WF_REGION }}
-          WF_DNS_ZONE: ${{ vars.WF_DNS_ZONE }}
-
       - name: Deploy
         run: |
           set -euo pipefail
-          mapfile -t args < "${WF_DEPLOY_ARGS_FILE}"
+          source .wayfinder/ci.env
+
+          # The cloud identity sits in the same workspace as the service
+          # account, which is the middle segment of tenant:workspace:name.
+          workspace="$(cut -d: -f2 <<<"${WAYFINDER_SERVICE_ACCOUNT}")"
+          args=(
+            --identity "${WF_IDENTITY:-${workspace}/${WAYFINDER_ENVIRONMENT}/aws-${WAYFINDER_ENVIRONMENT}}"
+            --region "${WF_REGION}"
+          )
+          # Without a zone the web app answers on CloudFront's own
+          # *.cloudfront.net domain, which needs no Route53 zone.
+          if [[ -n "${WF_DNS_ZONE:-}" ]]; then
+            args+=(--dns-zone "${WF_DNS_ZONE}")
+          fi
+
+          # One long-lived instance, redeployed on every merge. The name is
+          # passed on to the step that writes the summary.
+          instance="${WF_SERVICE_NAME}-develop"
+          echo "WF_INSTANCE=${instance}" >> "$GITHUB_ENV"
+
           wf deploy --non-interactive --timeout 30m \
-            -i "${WF_INSTANCE}" \
+            -i "${instance}" \
             -e "${WAYFINDER_ENVIRONMENT}" \
             -f Wayfinder.yaml \
             --env-var RELEASE="sha-${GITHUB_SHA:0:7}" \

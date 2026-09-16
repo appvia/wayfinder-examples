@@ -4,7 +4,9 @@
 # A destroy runs no LocalActions, so nothing is built here.
 #
 # This file is copied into your repository verbatim — Wayfinder does not
-# template it. Per-repository values live in .wayfinder/ci.env.
+# template it. The job declares `environment: preview`, so it signs in as the
+# same preview service account that deployed the instance and destroys it with
+# the rights that account has.
 name: Tear down preview
 
 on:
@@ -19,33 +21,33 @@ concurrency:
   group: ci-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
-env:
-  WAYFINDER_SERVER: ${{ vars.WF_SERVER }}
-
 jobs:
   teardown:
     name: Destroy preview instance
     runs-on: ubuntu-latest
+    environment: preview
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_SERVICE_ACCOUNT }}
+      WAYFINDER_ENVIRONMENT: ${{ vars.WAYFINDER_ENVIRONMENT }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Install the Wayfinder CLI
         run: .wayfinder/install-wf.sh
 
-      - name: Resolve the Wayfinder context
-        run: .wayfinder/ci-env.sh preview
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          WF_WORKSPACE_VAR: ${{ vars.WF_WORKSPACE }}
-          WF_IDENTITY: ${{ vars.WF_IDENTITY }}
-          WF_REGION: ${{ vars.WF_REGION }}
-
       # Tolerates an instance that was never created: a pull request can be
       # closed before any preview deployed, and a failed teardown must not turn
       # a merged pull request red.
       - name: Destroy the preview instance
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          set -uo pipefail
+          source .wayfinder/ci.env
+
+          instance="${WF_SERVICE_NAME}-pr${PR_NUMBER}"
           wf down --non-interactive --timeout 20m \
-            -i "${WF_INSTANCE}" \
+            -i "${instance}" \
             -e "${WAYFINDER_ENVIRONMENT}" \
-            || echo "::warning::Teardown of ${WF_INSTANCE} did not complete. Check for leftover resources with 'wf get stackinstance ${WF_INSTANCE} -e ${WAYFINDER_ENVIRONMENT}'."
+            || echo "::warning::Teardown of ${instance} did not complete. Check for leftover resources with 'wf get stackinstance ${instance} -e ${WAYFINDER_ENVIRONMENT}'."
