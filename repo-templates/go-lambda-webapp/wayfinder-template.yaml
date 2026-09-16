@@ -3,12 +3,6 @@
 # Parsed strictly: an unrecognised key here is an error, not a warning.
 # Everything under skeleton/ is what gets written into the new repository.
 #
-# STATUS: a skeleton. It renders a README and nothing else. The application, its
-# stack and its delivery pipeline are being built in a repository created FROM
-# this template, and will be back-filled here once they work. Building the app
-# first keeps the two classes of failure apart: a broken deploy in a real
-# repository is a broken deploy, whereas the same thing here could equally be a
-# bad render.
 name: Go Lambda web app
 description: >-
   A Go API running as a container on AWS Lambda behind API Gateway, a DynamoDB
@@ -83,3 +77,9 @@ skeleton:
     - ".github/workflows/*.yaml"
     - ".github/workflows/*.yml"
     - ".wayfinder/*.sh"
+    # The plans are Wayfinder's own template language throughout. Rendering them
+    # here would consume every expression in them.
+    - "plans/*.yaml"
+    # Lock files: large, and nothing in them to render.
+    - "go.sum"
+    - "web/package-lock.json"

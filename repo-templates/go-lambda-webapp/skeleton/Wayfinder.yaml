@@ -1,0 +1,146 @@
+# What gets deployed, and what each part is allowed to reach.
+#
+# Two kinds of placeholder are filled in at deploy time, not when you edit:
+#
+#   $${{ ... }}  A Wayfinder expression — a component's output, or a fact about
+#               the stack. Resolved in dependency order as the deploy runs.
+#   ${NAME}     Supplied on the command line with `wf deploy --env-var NAME=v`.
+#               Every one must resolve, and an --env-var nothing uses is an
+#               error rather than a silent no-op.
+#
+# Deploy it yourself with:
+#   wf up -f Wayfinder.yaml -i ${{ .Inputs.serviceName }}-dev -w <workspace> -e <environment> \
+#     --identity <workspace>/<environment>/aws-<environment> --region <region> \
+#     --env-var RELEASE=$(git rev-parse --short HEAD)
+apiVersion: v1
+name: ${{ .Inputs.serviceName }}
+description: "${{ .Inputs.description }}"
+
+components:
+
+  # The orders themselves. `api` below is granted read-write on this and nothing
+  # else is granted anything, so the IAM policy on the function's own role says
+  # exactly that.
+  db:
+    type: CloudResource
+    plan: file:plans/aws-dynamodb-table.yaml
+    inputs:
+      - name: suffix
+        value: orders
+      - name: hash_key
+        value: order_id
+
+  # This service's own registry, created and destroyed with the rest of the
+  # stack. Every pull request preview therefore gets one of its own, and nothing
+  # has to exist before the first deploy — which is the whole point: there is no
+  # registry address to know in advance, and no registry credential to store.
+  #
+  # MUTABLE because the same RELEASE is pushed repeatedly while iterating by
+  # hand; force_delete because a preview's registry has images in it when the
+  # pull request closes and the stack is destroyed.
+  registry:
+    type: CloudResource
+    plan: file:plans/aws-ecr.yaml
+    inputs:
+      - name: force_delete
+        value: true
+      - name: image_tag_mutability
+        value: MUTABLE
+
+  # Builds the image and pushes it. `withAccess` names a target on the
+  # deployment rather than a component, so this action runs with the deployment
+  # identity's own credentials — the same identity Terraform uses, and no access
+  # key anywhere.
+  pushimage:
+    type: LocalAction
+    needs: [registry]
+    withAccess:
+      - targetName: cloud
+    localAction:
+      run: |-
+        aws ecr get-login-password --region $${{ .Cloud.Region }} \
+          | docker login --username AWS --password-stdin $${{ .Components.registry.repository_url }}
+        make image RELEASE=${RELEASE}
+        docker tag ${{ .Inputs.serviceName }}:${RELEASE} $${{ .Components.registry.repository_url }}:${RELEASE}
+        docker push $${{ .Components.registry.repository_url }}:${RELEASE}
+
+  # The function. Its workload identity is granted read-write on `db`; Wayfinder
+  # turns that one line into the IAM policy on the execution role, and
+  # ORDERS_TABLE tells the code which table it landed on.
+  api:
+    type: CloudResource
+    plan: file:plans/aws-lambda-go-handler.yaml
+    needs: [pushimage]
+    workloadIdentity:
+      access:
+        - to: db
+          consumptionPolicy: read-write
+    inputs:
+      - name: suffix
+        value: api
+      - name: container_image_uri
+        value: "$${{ .Components.registry.repository_url }}:${RELEASE}"
+    terraform:
+      tfVarsTemplate: |-
+        env = {
+          ORDERS_TABLE = "$${{ .Components.db.table_name }}"
+        }
+
+  # One ANY route sends every /api/* request to the function, which routes them
+  # itself. Adding an endpoint is then a change to Go and nothing else.
+  #
+  # The stage is $default so the invoke URL carries no stage prefix and
+  # CloudFront's /api/* paths arrive verbatim.
+  apigateway:
+    type: CloudResource
+    plan: file:plans/aws-api-gateway-lambda.yaml
+    needs: [api]
+    inputs:
+      - name: api_name
+        value: "$${{ .Stack.Name }}-$${{ .Stack.Instance.Name }}-api"
+      - name: stage_name
+        value: "$default"
+      - name: lambda_function_names
+        value:
+          - "$${{ .Components.api.lambda_function_name }}"
+    terraform:
+      tfVarsTemplate: |-
+        routes = {
+          "ANY /api/{proxy+}" = {
+            integration = {
+              uri                    = "$${{ .Components.api.lambda_function_invoke_arn }}"
+              payload_format_version = "2.0"
+              timeout_milliseconds   = 30000
+            }
+          }
+        }
+
+  # CloudFront serves the web app on /* and forwards /api/* to the gateway, so
+  # the browser talks to one origin and never learns the API Gateway URL.
+  #
+  # No hosted zone is named, so this answers on CloudFront's own
+  # *.cloudfront.net domain. Set hosted_zone_name and hostname to put it on a
+  # domain of your own.
+  web:
+    type: CloudResource
+    plan: file:plans/aws-cloudfront-spa.yaml
+    needs: [apigateway]
+    inputs:
+      - name: api_gateway_id
+        value: "$${{ .Components.apigateway.api_gateway_id }}"
+      - name: api_gateway_endpoint
+        value: "$${{ .Components.apigateway.api_endpoint }}"
+
+  # Builds the web app and puts it in the bucket CloudFront serves.
+  deployweb:
+    type: LocalAction
+    needs: [web]
+    withAccess:
+      - targetName: cloud
+    localAction:
+      run: |-
+        make web
+        aws s3 sync web/dist s3://$${{ .Components.web.spa_bucket_id }}/ --delete --sse
+        aws cloudfront create-invalidation \
+          --distribution-id $${{ .Components.web.distribution_id }} \
+          --paths "/*"

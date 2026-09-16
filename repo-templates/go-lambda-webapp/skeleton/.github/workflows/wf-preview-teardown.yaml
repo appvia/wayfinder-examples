@@ -1,6 +1,7 @@
 # Destroys the preview environment when a pull request closes.
 #
 # Runs whether the pull request was merged or abandoned — `closed` covers both.
+# A destroy runs no LocalActions, so nothing is built here.
 #
 # This file is copied into your repository verbatim — Wayfinder does not
 # template it. Per-repository values live in .wayfinder/ci.env.
@@ -18,22 +19,26 @@ concurrency:
   group: ci-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
+env:
+  WAYFINDER_SERVER: ${{ vars.WF_SERVER }}
+
 jobs:
   teardown:
     name: Destroy preview instance
     runs-on: ubuntu-latest
-    container:
-      image: ${{ vars.WF_TOOLBOX_IMAGE || 'quay.io/appvia-wayfinder/wftoolbox:latest' }}
-    env:
-      WAYFINDER_SERVER: ${{ vars.WF_SERVER }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install the Wayfinder CLI
+        run: .wayfinder/install-wf.sh
 
       - name: Resolve the Wayfinder context
         run: .wayfinder/ci-env.sh preview
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           WF_WORKSPACE_VAR: ${{ vars.WF_WORKSPACE }}
+          WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+          WF_REGION: ${{ vars.WF_REGION }}
 
       # Tolerates an instance that was never created: a pull request can be
       # closed before any preview deployed, and a failed teardown must not turn

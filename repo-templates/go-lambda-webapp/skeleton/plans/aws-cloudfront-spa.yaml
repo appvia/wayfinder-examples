@@ -1,0 +1,455 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-cloudfront-spa
+  version: "1.1.0"
+spec:
+  cloud: aws
+  description: "CloudFront distribution fronting an S3 SPA bucket (/*), an API Gateway (/api/*), and an optional WebSocket API Gateway (/ws). Serves on CloudFront's own *.cloudfront.net domain, or on a custom hostname backed by an ACM cert in us-east-1 (Wayfinder-managed aliased provider) when a Route53 zone is named."
+  inputs:
+    - name: api_gateway_id
+      description: "The API Gateway v2 API ID — used to scope the bucket policy's CloudFront SourceArn condition."
+      type: string
+      optional: false
+    - name: api_gateway_endpoint
+      description: "The API Gateway v2 invoke URL (e.g. https://abc123.execute-api.eu-west-2.amazonaws.com). The plan strips https:// and any trailing path to form the CloudFront origin domain. With APIGW stage=$default the URL has no stage prefix and CloudFront's /api/* paths reach the right routes verbatim."
+      type: string
+      optional: false
+    - name: api_path_pattern
+      description: "Path pattern routed to the API Gateway origin. Default /api/*."
+      type: string
+      optional: true
+      defaultValue: "/api/*"
+    - name: hosted_zone_name
+      description: "Route53 hosted zone (e.g. example.com) used for both the ACM cert DNS validation records and the public A-alias record pointing at the CloudFront distribution. Leave it empty and the SPA answers on CloudFront's own *.cloudfront.net domain instead, which needs no Route53 zone and no certificate."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: hostname
+      description: "Hostname within the hosted zone (e.g. orderly-dev1). The full FQDN — \"${hostname}.${hosted_zone_name}\" — is the CloudFront alias and ACM cert subject. Set it whenever hosted_zone_name is set; it is ignored when hosted_zone_name is empty."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: ws_origin_domain
+      description: "Optional WebSocket API Gateway origin host (no scheme, no stage — e.g. abc123.execute-api.eu-west-2.amazonaws.com). When set, a CloudFront origin + a ws_path behavior are added so wss://<fqdn><ws_path> reaches the WebSocket API. The WS API stage MUST be named to match ws_path (default 'ws' ↔ '/ws')."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: ws_path
+      description: "Path routed to the WebSocket origin. Default /ws. Must equal the WebSocket API Gateway stage name (with a leading slash)."
+      type: string
+      optional: true
+      defaultValue: "/ws"
+  outputs:
+    - name: distribution_id
+      description: "CloudFront distribution ID"
+      type: string
+    - name: cloudfront_url
+      description: "Public FQDN of the SPA: the custom domain (e.g. orderly-dev1.example.com) when hosted_zone_name is set, and CloudFront's own *.cloudfront.net domain when it is not."
+      type: string
+    - name: distribution_domain_name
+      description: "CloudFront's default *.cloudfront.net domain (useful for debugging or as an A-alias target)."
+      type: string
+    - name: spa_bucket_id
+      description: "SPA S3 bucket name (random-suffixed by Terraform)"
+      type: string
+    - name: spa_bucket_arn
+      description: "SPA S3 bucket ARN"
+      type: string
+  consumptionPolicies:
+    # For a LocalAction that builds + syncs the SPA and invalidates CloudFront.
+    - name: deploy
+      grantPermissions:
+        aws:
+          customIAMPolicyTemplate: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "SPABucketWrite",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:DeleteObject",
+                    "s3:GetObject"
+                  ],
+                  "Resource": "${{ .Outputs.spa_bucket_arn }}/*"
+                },
+                {
+                  "Sid": "SPABucketList",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket"
+                  ],
+                  "Resource": "${{ .Outputs.spa_bucket_arn }}"
+                },
+                {
+                  "Sid": "CloudFrontInvalidate",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudfront:CreateInvalidation",
+                    "cloudfront:GetInvalidation"
+                  ],
+                  "Resource": "arn:aws:cloudfront::*:distribution/${{ .Outputs.distribution_id }}"
+                }
+              ]
+            }
+  terraform:
+    # CloudFront requires its ACM cert in us-east-1 regardless of where the
+    # rest of the stack lives. The us_east_1 alias here causes Wayfinder to
+    # render an aliased `provider "aws"` block in provider.tf; the cert
+    # resources in cert.tf reference it via `provider = aws.us_east_1`.
+    additionalRegionalProviders:
+      - alias: us_east_1
+        region: us-east-1
+    modules:
+      - name: s3_bucket
+        source: "https://github.com/terraform-aws-modules/terraform-aws-s3-bucket"
+        version: "v4.1.2"
+    files:
+      - name: main.tf
+        template: |
+          # ── SPA S3 bucket ──────────────────────────────────────────────────────────────
+          # bucket_prefix lets Terraform append a 26-char random suffix, guaranteeing
+          # global S3 uniqueness. The final name is read from the spa_bucket_id output.
+          # The prefix portion must stay ≤ 37 chars; "${stack}-${instance}-spa-" is safe.
+          module "s3_bucket" {
+            source = ${{ .Modules.s3_bucket.Source | quote }}
+
+            bucket_prefix = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-spa-"
+
+            # Block all public access — content served exclusively through CloudFront OAC.
+            attach_public_policy = false
+            block_public_acls    = true
+            block_public_policy  = true
+            ignore_public_acls   = true
+            restrict_public_buckets = true
+
+            # Server-side encryption
+            server_side_encryption_configuration = {
+              rule = {
+                apply_server_side_encryption_by_default = {
+                  sse_algorithm = "AES256"
+                }
+              }
+            }
+
+            force_destroy = true
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          # ── CloudFront Origin Access Control ──────────────────────────────────────────
+          # OAC (not legacy OAI) — current AWS-recommended approach for S3 origins.
+          resource "aws_cloudfront_origin_access_control" "spa" {
+            name                              = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-spa-oac"
+            description                       = "OAC for ${{ .Stack.Name }}-${{ .Stack.Instance.Name }} SPA bucket"
+            origin_access_control_origin_type = "s3"
+            signing_behavior                  = "always"
+            signing_protocol                  = "sigv4"
+          }
+
+          # ── Bucket policy: grant CloudFront OAC read access ────────────────────────────
+          data "aws_iam_policy_document" "spa_bucket_policy" {
+            statement {
+              sid    = "AllowCloudFrontOAC"
+              effect = "Allow"
+              principals {
+                type        = "Service"
+                identifiers = ["cloudfront.amazonaws.com"]
+              }
+              actions   = ["s3:GetObject"]
+              resources = ["${module.s3_bucket.s3_bucket_arn}/*"]
+              condition {
+                test     = "StringEquals"
+                variable = "AWS:SourceArn"
+                values   = [aws_cloudfront_distribution.spa.arn]
+              }
+            }
+          }
+
+          resource "aws_s3_bucket_policy" "spa" {
+            bucket = module.s3_bucket.s3_bucket_id
+            policy = data.aws_iam_policy_document.spa_bucket_policy.json
+          }
+
+          # ── CloudFront distribution ────────────────────────────────────────────────────
+          #
+          # Two origins:
+          #   s3_spa  — default (*) → S3 bucket via OAC (cached, redirect-to-https)
+          #   apigw   — ordered (/api/*) → API Gateway (no cache, all methods)
+          #
+          # Custom hostname served via an ACM cert in us-east-1 (see cert.tf).
+          # No custom_error_response: the Orderly SPA has no client-side router, so
+          # rewriting 404s to /index.html would mask every API 404 as a SPA HTML
+          # response that the JS then fails to parse as JSON.
+
+          locals {
+            ${{- if .Inputs.hosted_zone_name }}
+            fqdn = "${{ .Inputs.hostname }}.${{ .Inputs.hosted_zone_name }}"
+            ${{- end }}
+
+            # Strip "https://" prefix and any trailing path from the APIGW invoke URL.
+            # e.g. "https://abc123.execute-api.eu-west-2.amazonaws.com" → "abc123.execute-api.eu-west-2.amazonaws.com"
+            apigw_origin_domain = replace(
+              replace("${{ .Inputs.api_gateway_endpoint }}", "https://", ""),
+              "/\\/.*$/",
+              ""
+            )
+          }
+
+          resource "aws_cloudfront_distribution" "spa" {
+            enabled             = true
+            is_ipv6_enabled     = true
+            default_root_object = "index.html"
+            price_class         = "PriceClass_100"
+            ${{- if .Inputs.hosted_zone_name }}
+            aliases             = [local.fqdn]
+
+            # The cert must be fully validated before the distribution is created;
+            # the validation resource lives in cert.tf.
+            depends_on = [aws_acm_certificate_validation.spa]
+            ${{- end }}
+
+            # ── S3 SPA origin (default) ─────────────────────────────────────────────────
+            origin {
+              domain_name              = module.s3_bucket.s3_bucket_bucket_regional_domain_name
+              origin_id                = "s3_spa"
+              origin_access_control_id = aws_cloudfront_origin_access_control.spa.id
+            }
+
+            # ── API Gateway origin ──────────────────────────────────────────────────────
+            origin {
+              domain_name = local.apigw_origin_domain
+              origin_id   = "apigw"
+
+              custom_origin_config {
+                http_port              = 80
+                https_port             = 443
+                origin_protocol_policy = "https-only"
+                origin_ssl_protocols   = ["TLSv1.2"]
+              }
+            }
+
+            ${{- if .Inputs.ws_origin_domain }}
+            # ── WebSocket API Gateway origin ────────────────────────────────────────────
+            # CloudFront natively proxies the WebSocket upgrade. The ws_path behavior
+            # forwards "/ws" verbatim to this origin, which the WS API serves as its
+            # stage of the same name.
+            origin {
+              domain_name = "${{ .Inputs.ws_origin_domain }}"
+              origin_id   = "wsapigw"
+
+              custom_origin_config {
+                http_port              = 80
+                https_port             = 443
+                origin_protocol_policy = "https-only"
+                origin_ssl_protocols   = ["TLSv1.2"]
+              }
+            }
+            ${{- end }}
+
+            # ── Default cache behavior → S3 SPA ────────────────────────────────────────
+            default_cache_behavior {
+              allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+              cached_methods         = ["GET", "HEAD"]
+              target_origin_id       = "s3_spa"
+              viewer_protocol_policy = "redirect-to-https"
+              compress               = true
+
+              forwarded_values {
+                query_string = false
+                cookies {
+                  forward = "none"
+                }
+              }
+
+              min_ttl     = 0
+              default_ttl = 86400
+              max_ttl     = 31536000
+            }
+
+            # ── Ordered cache behavior → API Gateway (/api/*) ──────────────────────────
+            ordered_cache_behavior {
+              path_pattern           = "${{ .Inputs.api_path_pattern }}"
+              allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+              cached_methods         = ["GET", "HEAD"]
+              target_origin_id       = "apigw"
+              viewer_protocol_policy = "redirect-to-https"
+              compress               = false
+
+              # No caching for API traffic
+              min_ttl     = 0
+              default_ttl = 0
+              max_ttl     = 0
+
+              forwarded_values {
+                query_string = true
+                headers      = ["Authorization", "Content-Type", "Origin", "Accept"]
+                cookies {
+                  forward = "all"
+                }
+              }
+            }
+
+            ${{- if .Inputs.ws_origin_domain }}
+            # ── Ordered cache behavior → WebSocket API Gateway (/ws) ───────────────────
+            # CloudFront handles the Upgrade/Connection handshake automatically; we only
+            # need to forward the Sec-WebSocket-* headers and disable caching. Host is
+            # intentionally NOT forwarded so CloudFront sets it to the origin domain.
+            ordered_cache_behavior {
+              path_pattern           = "${{ .Inputs.ws_path }}"
+              allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+              cached_methods         = ["GET", "HEAD"]
+              target_origin_id       = "wsapigw"
+              viewer_protocol_policy = "redirect-to-https"
+              compress               = false
+
+              min_ttl     = 0
+              default_ttl = 0
+              max_ttl     = 0
+
+              forwarded_values {
+                query_string = true
+                headers = [
+                  "Sec-WebSocket-Key",
+                  "Sec-WebSocket-Version",
+                  "Sec-WebSocket-Protocol",
+                  "Sec-WebSocket-Extensions",
+                ]
+                cookies {
+                  forward = "none"
+                }
+              }
+            }
+            ${{- end }}
+
+            ${{- if .Inputs.hosted_zone_name }}
+            # ── Custom-domain TLS via us-east-1 ACM cert ───────────────────────────────
+            viewer_certificate {
+              acm_certificate_arn      = aws_acm_certificate.spa.arn
+              ssl_support_method       = "sni-only"
+              minimum_protocol_version = "TLSv1.2_2021"
+            }
+            ${{- else }}
+            # No Route53 zone was named, so the SPA answers on the distribution's own
+            # *.cloudfront.net domain, which CloudFront's certificate already covers.
+            viewer_certificate {
+              cloudfront_default_certificate = true
+            }
+            ${{- end }}
+
+            restrictions {
+              geo_restriction {
+                restriction_type = "none"
+              }
+            }
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          ${{- if .Inputs.hosted_zone_name }}
+          # ── Public A-alias from custom hostname → CloudFront ───────────────────────────
+          # Route53 is global so this uses the default (stack-region) AWS provider.
+          data "aws_route53_zone" "spa" {
+            name         = "${{ .Inputs.hosted_zone_name }}"
+            private_zone = false
+          }
+
+          resource "aws_route53_record" "spa" {
+            zone_id = data.aws_route53_zone.spa.zone_id
+            name    = local.fqdn
+            type    = "A"
+
+            alias {
+              name                   = aws_cloudfront_distribution.spa.domain_name
+              zone_id                = aws_cloudfront_distribution.spa.hosted_zone_id
+              evaluate_target_health = false
+            }
+          }
+          ${{- end }}
+
+      - name: cert.tf
+        template: |
+          ${{- if .Inputs.hosted_zone_name }}
+          # ── ACM cert in us-east-1 (CloudFront constraint) ──────────────────────────────
+          # CloudFront only accepts viewer certs from us-east-1, so we use the aliased
+          # provider declared in spec.terraform.additionalRegionalProviders. The DNS
+          # validation records go in the same Route53 zone that hosts the public A-alias
+          # (see main.tf) — Route53 is global so the default provider handles those.
+
+          resource "aws_acm_certificate" "spa" {
+            provider          = aws.us_east_1
+            domain_name       = "${{ .Inputs.hostname }}.${{ .Inputs.hosted_zone_name }}"
+            validation_method = "DNS"
+
+            lifecycle {
+              create_before_destroy = true
+            }
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          resource "aws_route53_record" "spa_cert_validation" {
+            for_each = {
+              for dvo in aws_acm_certificate.spa.domain_validation_options : dvo.domain_name => {
+                name   = dvo.resource_record_name
+                record = dvo.resource_record_value
+                type   = dvo.resource_record_type
+              }
+            }
+
+            zone_id         = data.aws_route53_zone.spa.zone_id
+            name            = each.value.name
+            type            = each.value.type
+            ttl             = 60
+            records         = [each.value.record]
+            allow_overwrite = true
+          }
+
+          resource "aws_acm_certificate_validation" "spa" {
+            provider                = aws.us_east_1
+            certificate_arn         = aws_acm_certificate.spa.arn
+            validation_record_fqdns = [for r in aws_route53_record.spa_cert_validation : r.fqdn]
+          }
+          ${{- end }}
+
+      - name: outputs.tf
+        template: |
+          output "distribution_id" {
+            value = aws_cloudfront_distribution.spa.id
+          }
+
+          # The URL the demo's audience hits.
+          output "cloudfront_url" {
+            ${{- if .Inputs.hosted_zone_name }}
+            value = local.fqdn
+            ${{- else }}
+            value = aws_cloudfront_distribution.spa.domain_name
+            ${{- end }}
+          }
+
+          # The underlying *.cloudfront.net domain (useful for debugging).
+          output "distribution_domain_name" {
+            value = aws_cloudfront_distribution.spa.domain_name
+          }
+
+          output "spa_bucket_id" {
+            value = module.s3_bucket.s3_bucket_id
+          }
+
+          output "spa_bucket_arn" {
+            value = module.s3_bucket.s3_bucket_arn
+          }

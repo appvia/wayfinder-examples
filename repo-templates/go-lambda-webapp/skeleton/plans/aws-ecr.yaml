@@ -1,0 +1,220 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-ecr
+  publishState: Published
+  version: 0.1.5
+spec:
+  category: containers
+  cloud: aws
+  consumptionPolicies:
+  - grantPermissions:
+      aws:
+        customIAMPolicyTemplate: |-
+          Version: "2012-10-17"
+          Statement:
+            - Sid: PushImage
+              Effect: Allow
+              Action:
+                - "ecr:BatchCheckLayerAvailability"
+                - "ecr:GetDownloadUrlForLayer"
+                - "ecr:PutImage"
+                - "ecr:InitiateLayerUpload"
+                - "ecr:UploadLayerPart"
+                - "ecr:CompleteLayerUpload"
+                - "ecr:BatchGetImage"
+                - "ecr:DescribeImages"
+              Resource: ["${{ .Outputs.repository_arn }}"]
+            - Sid: GetAuthorizationToken
+              Effect: Allow
+              Action:
+                - "ecr:GetAuthorizationToken"
+              Resource: ["*"]
+    name: push
+  - grantPermissions:
+      aws:
+        customIAMPolicyTemplate: |-
+          Version: "2012-10-17"
+          Statement:
+            - Sid: PullImage
+              Effect: Allow
+              Action:
+                - "ecr:BatchGetImage"
+                - "ecr:GetDownloadUrlForLayer"
+                - "ecr:DescribeImages"
+              Resource: ["${{ .Outputs.repository_arn }}"]
+            - Sid: GetAuthorizationToken
+              Effect: Allow
+              Action:
+                - "ecr:GetAuthorizationToken"
+              Resource: ["*"]
+    name: pull
+  - grantPermissions:
+      aws:
+        customIAMPolicyTemplate: |-
+          Version: "2012-10-17"
+          Statement:
+            - Sid: AdminAccess
+              Effect: Allow
+              Action:
+                - "ecr:*"
+              Resource: ["${{ .Outputs.repository_arn }}"]
+            - Sid: GetAuthorizationToken
+              Effect: Allow
+              Action:
+                - "ecr:GetAuthorizationToken"
+              Resource: ["*"]
+    name: admin
+  description: ECR repository to be delivered per stack-instance
+  inputs:
+  - defaultValue: private
+    description: 'The type of ECR repository to create: ''private'' (default) or ''public'''
+    enum:
+    - private
+    - public
+    name: repository_type
+    optional: true
+    type: string
+  - defaultValue: true
+    description: Whether to scan images for vulnerabilities when pushed to the repository
+    name: image_scan_on_push
+    optional: true
+    type: bool
+  - defaultValue: IMMUTABLE
+    description: 'Whether image tags are mutable. Options: MUTABLE, IMMUTABLE (default)'
+    enum:
+    - MUTABLE
+    - IMMUTABLE
+    - MUTABLE_WITH_EXCLUSION
+    - IMMUTABLE_WITH_EXCLUSION
+    name: image_tag_mutability
+    optional: true
+    type: string
+  - defaultValue: AES256
+    description: 'The encryption type for the repository: AES256 (default, AWS-managed)
+      or KMS (customer-managed)'
+    enum:
+    - AES256
+    - KMS
+    name: encryption_type
+    optional: true
+    type: string
+  - defaultValue: ""
+    description: The ARN of the KMS key to use for encryption when encryption_type
+      is 'KMS'. Leave empty to use the default AWS-managed key.
+    name: kms_key_arn
+    optional: true
+    type: string
+  - defaultValue: false
+    description: Whether to allow deletion of the repository even if it contains images
+    name: force_delete
+    optional: true
+    type: bool
+  - defaultValue: {}
+    description: Additional tags to apply to the ECR repository beyond default stack
+      tags
+    name: additional_tags
+    optional: true
+    type: map(string)
+  outputs:
+  - description: Full ARN of the ECR repository
+    name: repository_arn
+    type: string
+  - description: Name of the ECR repository
+    name: repository_name
+    type: string
+  - description: The URL of the ECR repository (for docker pull/push operations)
+    name: repository_url
+    type: string
+  - description: The AWS account ID that owns the ECR registry
+    name: registry_id
+    type: string
+  resourceType: dependency
+  terraform:
+    files:
+    - name: main.tf
+      template: |
+        module "ecr" {
+          source = ${{ .Modules.ecr.Source | quote }}
+
+          repository_name                = "${{ .Workspace }}-${{ .Environment }}-${{ .Stack.Instance.Name }}"
+          repository_type                = ${{ .Inputs.repository_type | quote }}
+          repository_force_delete        = ${{ .Inputs.force_delete }}
+          repository_image_scan_on_push  = ${{ .Inputs.image_scan_on_push }}
+          repository_image_tag_mutability = ${{ .Inputs.image_tag_mutability | quote }}
+          repository_encryption_type     = ${{ .Inputs.encryption_type | quote }}
+        ${{ if .Inputs.kms_key_arn }}
+          repository_kms_key             = ${{ .Inputs.kms_key_arn | quote }}
+        ${{ end }}
+
+          repository_policy_statements = {
+            lambda_image_retrieval = {
+              sid    = "LambdaECRImageRetrievalPolicy"
+              effect = "Allow"
+              principals = [{
+                type        = "Service"
+                identifiers = ["lambda.amazonaws.com"]
+              }]
+              actions = [
+                "ecr:BatchGetImage",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:GetAuthorizationToken",
+              ]
+            }
+          }
+
+          create_lifecycle_policy = true
+          repository_lifecycle_policy = jsonencode({
+            rules = [
+              {
+                rulePriority = 1
+                description  = "Keep last 10 images"
+                selection = {
+                  tagStatus     = "any"
+                  countType     = "imageCountMoreThan"
+                  countNumber   = 10
+                }
+                action = {
+                  type = "expire"
+                }
+              }
+            ]
+          })
+
+          tags = merge(
+            {
+              Workspace     = ${{ .Workspace | quote }}
+              Environment   = ${{ .Environment | quote }}
+              Stack         = ${{ .Stack.Name | quote }}
+              StackInstance = ${{ .Stack.Instance.Name | quote }}
+              ManagedBy     = "Wayfinder"
+              purpose       = "shared-registry"
+            },
+            ${{ .Inputs.additional_tags | default dict | toTFVars }}
+          )
+        }
+    - name: outputs.tf
+      template: |
+        output "repository_arn" {
+          description = "Full ARN of the ECR repository"
+          value       = module.ecr.repository_arn
+        }
+
+        output "repository_name" {
+          description = "Name of the ECR repository"
+          value       = module.ecr.repository_name
+        }
+
+        output "repository_url" {
+          description = "The URL of the ECR repository (for docker pull/push operations)"
+          value       = module.ecr.repository_url
+        }
+
+        output "registry_id" {
+          description = "The AWS account ID that owns the ECR registry"
+          value       = module.ecr.repository_registry_id
+        }
+    modules:
+    - name: ecr
+      source: https://github.com/terraform-aws-modules/terraform-aws-ecr
+      version: v3.2.0

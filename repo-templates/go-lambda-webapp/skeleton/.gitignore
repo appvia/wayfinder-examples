@@ -1,0 +1,11 @@
+bin/
+coverage.out
+web/dist/
+web/node_modules/
+
+# Written by `wf up` to remember the stack instance you last deployed to.
+.wfup
+
+# Written by `wf deploy --out-file`.
+deploy.json
+preview.json
