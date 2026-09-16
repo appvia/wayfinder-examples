@@ -25,8 +25,15 @@
 # it already administers. What it still cannot do is reach another team's account or
 # edit the platform's own identities.
 #
+# Where that line sits is the platform team's choice, made in IAM when the account was
+# vended: the policy on the `wf-deploy` role either includes creating roles or it does
+# not, and a permissions boundary can allow it while capping what those roles may do.
+# An identity here that names a role the team could not create stays Unverified and
+# grants nothing.
+#
 # So a cloud account id and a role ARN do belong here, in identities-*.yaml - but only
-# ever this team's own.
+# ever this team's own. `aws-<environment>` itself stays out: the vend delivered it, and
+# a bad merge under --prune must not be able to remove the grant this CI deploys through.
 apiVersion: org/v3
 kind: RoleBinding
 metadata:
