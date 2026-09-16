@@ -90,11 +90,11 @@ and a new identity needs both in the same pull request:
   that role, and says who may use it.
 
 Nothing flows from the Terraform into the manifest. A role's name and ARN follow from
-the account id and a name the team chose, so the manifest writes them out. The
-repository is scaffolded before the account is vended, so the manifest ships **commented
-out**: a file with nothing but comments in it is not a Wayfinder resource and `wf apply`
-skips it, saying so. Once the account exists the team uncomments it and fills in the
-account id, in the same pull request that records the account in `environments.yaml`.
+the account id and a name the team chose, so the manifest writes them out. The account
+id is a template input: the onboarding workflow vends the account before it scaffolds
+the repository and passes the id in, so the identities are declared from the first
+commit. Scaffolded without one, the manifest is empty and `wf apply` skips it; the team
+adds the identities once the account exists.
 
 The two starters are `aws-readonly`, granted to whoever holds `deployer` in the
 environment, and `module-upgrade-inspector`, granted to the `module-upgrade-prove` AI
@@ -115,8 +115,7 @@ would sit unverified until somebody noticed.
 
 Both jobs read `environments.yaml` and skip any environment whose `aws-<environment>`
 identity does not exist yet, printing that it has no vended account. The manifests are
-applied as a directory, as before; a still-commented identities file is skipped by
-`wf apply` itself, so CI carries no knowledge of it.
+applied as a directory; an empty identities file is skipped by `wf apply` itself.
 
 The plan is trustworthy rather than advisory because of the credential, not the
 command: the CI service account's federated trust is pinned to `refs/heads/main`,
