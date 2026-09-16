@@ -67,6 +67,18 @@ inputs:
     optional: true
     defaultValue: "eu-west-2"
 
+  # Set by the onboarding workflow, which vends the account before it scaffolds this
+  # repository. Blank when the repository is created first, in which case the
+  # identities manifest for the first environment is written empty and the team adds
+  # it once the account exists.
+  - name: accountId
+    description: >-
+      Twelve-digit AWS account id vended for the first environment, if it exists yet.
+    type: string
+    optional: true
+    defaultValue: ""
+    pattern: "^([0-9]{12})?$"
+
   - name: wayfinderServer
     description: >-
       Wayfinder API URL this repository's CI talks to. Leave blank for the

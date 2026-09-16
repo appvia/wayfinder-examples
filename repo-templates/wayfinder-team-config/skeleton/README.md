@@ -64,10 +64,10 @@ Two pieces, and a new identity needs both in the same pull request:
 | `manifests/identities-<environment>.yaml` | The `ExternalIdentity` naming that role, and who may use it |
 
 The role's name and ARN are decided by the plan, not discovered, so the manifest writes
-them out. It ships **commented out**, because the account it names does not exist when
-the repository is created. **After the vend, uncomment it and fill in the account id**, in
-the same pull request that records the account in `environments.yaml`. Until then
-`wf apply` skips the file as not a Wayfinder resource, and says so in the CI log.
+them out. When this repository was created after its first account was vended, the
+manifest already carries the account id. If it is empty under its header, the account
+did not exist yet: add the identities in the pull request that records the account in
+`environments.yaml`, and `wf apply` skips the file until then.
 
 ## Authentication
 
