@@ -60,6 +60,90 @@ inputs:
     defaultValue: "prod"
     pattern: "^[a-z][a-z0-9-]*$"
 
+  - name: region
+    description: >-
+      AWS region this service deploys into. AWS has no default, so a deployment
+      without one fails on its first resource.
+    type: string
+    optional: true
+    defaultValue: "eu-west-2"
+    pattern: "^[a-z]{2}-[a-z]+-[0-9]$"
+
+# Created with the repository, once. Wayfinder makes one service account per
+# deployment environment, trusted only by a workflow run in THIS repository whose
+# job declares that environment - so the credential a pull request can use is not
+# the one that reaches production. Each is created as the person scaffolding, so
+# a template can only hand out access they already hold.
+ci:
+  wayfinderServiceAccounts:
+    previewDeployer:
+      name: ${{ .Inputs.previewEnvironment }}-${{ .Repo.Name }}-preview
+      roles:
+        - role: deployer
+          workspace: ${{ .Workspace }}
+          env: ${{ .Inputs.previewEnvironment }}
+        # Wayfinder.yaml names its plans as file:plans/..., which publishes each
+        # one to the workspace catalogue as it deploys - including on the dry run
+        # a pull request does.
+        - role: workspace.cataloguemanagement
+          workspace: ${{ .Workspace }}
+      trust:
+        githubEnvironment: preview
+
+    developDeployer:
+      name: ${{ .Inputs.developEnvironment }}-${{ .Repo.Name }}-develop
+      roles:
+        - role: deployer
+          workspace: ${{ .Workspace }}
+          env: ${{ .Inputs.developEnvironment }}
+        - role: workspace.cataloguemanagement
+          workspace: ${{ .Workspace }}
+      trust:
+        githubEnvironment: develop
+
+    prodDeployer:
+      name: ${{ .Inputs.prodEnvironment }}-${{ .Repo.Name }}-prod
+      roles:
+        - role: deployer
+          workspace: ${{ .Workspace }}
+          env: ${{ .Inputs.prodEnvironment }}
+        - role: workspace.cataloguemanagement
+          workspace: ${{ .Workspace }}
+      trust:
+        githubEnvironment: production
+
+# GitHub variables, set when the repository is created. The ones with no
+# githubEnvironment are repository-wide; the rest are set on that deployment
+# environment, so a job sees the ones belonging to the environment it declares
+# and no others. These names are what .github/workflows/ reads.
+repository:
+  variables:
+    - name: WAYFINDER_SERVER
+      value: ${{ .Wayfinder.Server }}
+    - name: WF_REGION
+      value: ${{ .Inputs.region }}
+
+    - name: WAYFINDER_SERVICE_ACCOUNT
+      value: ${{ .CI.ServiceAccounts.previewDeployer.Ref }}
+      githubEnvironment: preview
+    - name: WAYFINDER_ENVIRONMENT
+      value: ${{ .Inputs.previewEnvironment }}
+      githubEnvironment: preview
+
+    - name: WAYFINDER_SERVICE_ACCOUNT
+      value: ${{ .CI.ServiceAccounts.developDeployer.Ref }}
+      githubEnvironment: develop
+    - name: WAYFINDER_ENVIRONMENT
+      value: ${{ .Inputs.developEnvironment }}
+      githubEnvironment: develop
+
+    - name: WAYFINDER_SERVICE_ACCOUNT
+      value: ${{ .CI.ServiceAccounts.prodDeployer.Ref }}
+      githubEnvironment: production
+    - name: WAYFINDER_ENVIRONMENT
+      value: ${{ .Inputs.prodEnvironment }}
+      githubEnvironment: production
+
 skeleton:
   path: skeleton
 
