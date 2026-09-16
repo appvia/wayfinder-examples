@@ -44,11 +44,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Each template implements ci-setup for whatever its language needs —
-      # nothing, or installing a tool the runner does not ship. It is what keeps
-      # this workflow identical across every Wayfinder service template.
-      - name: Set up the toolchain
-        run: make ci-setup
+      # go.mod asks for a Go the runner does not ship, and GOTOOLCHAIN alone is
+      # not enough: it fetches a compiler but not the tools beside it, so
+      # `go test -covermode=atomic` stops with `no such tool "covdata"`. This
+      # installs the whole toolchain go.mod names.
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
 
       - name: Test
         run: make test

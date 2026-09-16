@@ -8,12 +8,6 @@ RELEASE ?= dev
 .PHONY: all
 all: lint test build web
 
-# Nothing to install: GitHub runners ship Go, and go.mod's `go 1.25` makes the
-# toolchain fetch the right version by itself.
-.PHONY: ci-setup
-ci-setup:
-	go version
-
 .PHONY: test
 test:
 	go test ./... -race -coverprofile=coverage.out -covermode=atomic
