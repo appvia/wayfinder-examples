@@ -67,7 +67,7 @@ components:
       - targetName: cloud
     localAction:
       run: |-
-        .wayfinder/ensure-image.sh \
+        bash .wayfinder/ensure-image.sh \
           ${{ .Inputs.serviceName }} \
           $${{ .Cloud.AWS.Account }}.dkr.ecr.$${{ .Cloud.Region }}.amazonaws.com/${{ .Inputs.serviceName }} \
           ${RELEASE} \
@@ -158,7 +158,7 @@ components:
       - targetName: cloud
     localAction:
       run: |-
-        .wayfinder/deploy-web.sh \
+        bash .wayfinder/deploy-web.sh \
           $${{ .Components.web.spa_bucket_id }} \
           $${{ .Components.web.distribution_id }} \
           ${RELEASE} \

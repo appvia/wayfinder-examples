@@ -84,7 +84,7 @@ jobs:
           ref: ${{ github.ref_name }}
 
       - name: Install the Wayfinder CLI
-        run: .wayfinder/install-wf.sh
+        run: bash .wayfinder/install-wf.sh
 
       - name: Verify the Wayfinder identity
         run: wf whoami

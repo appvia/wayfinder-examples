@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install the Wayfinder CLI
-        run: .wayfinder/install-wf.sh
+        run: bash .wayfinder/install-wf.sh
 
       - name: Deploy
         run: |

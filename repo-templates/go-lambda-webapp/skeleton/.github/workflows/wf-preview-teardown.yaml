@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install the Wayfinder CLI
-        run: .wayfinder/install-wf.sh
+        run: bash .wayfinder/install-wf.sh
 
       # Tolerates an instance that was never created: a pull request can be
       # closed before any preview deployed, and a failed teardown must not turn
