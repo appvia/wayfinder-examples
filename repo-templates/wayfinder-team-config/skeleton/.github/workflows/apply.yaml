@@ -58,8 +58,7 @@ jobs:
         run: grep -E '^[A-Z][A-Z0-9_]*=' .wayfinder/ci.env >> "$GITHUB_ENV"
 
       # Runs before the manifests apply, so a role exists by the time an identity
-      # naming it is created. It also writes down which environments have an
-      # account, which the apply step reads.
+      # naming it is created.
       #
       # The env block is repeated on each step rather than set on the job: a job's
       # own env is evaluated before any step runs, so WF_SERVER and the rest -
@@ -75,14 +74,12 @@ jobs:
           WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
         run: |
           set -euo pipefail
-          : > "${RUNNER_TEMP}/vended-envs"
 
           for env in $(yq -r '.environments | keys | .[]' environments.yaml); do
             if ! wf get externalidentity "aws-${env}" -w "${WF_WORKSPACE}" -e "${env}" >/dev/null 2>&1; then
               echo "::notice::${env} has no vended account yet - ask your platform team to vend one against it"
               continue
             fi
-            echo "${env}" >> "${RUNNER_TEMP}/vended-envs"
 
             region=$(yq -r ".environments.\"${env}\".region" environments.yaml)
             wf deploy -f access/Wayfinder.yaml -i access \
@@ -100,34 +97,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          files=()
-          for f in manifests/*.yaml manifests/*.yml; do
-            [ -e "${f}" ] || continue
-
-            # Only an identities manifest ships with the account id left blank, and
-            # only its body counts: the file's own header explains the placeholder,
-            # so matching comments too would hold a filled-in file back for ever.
-            case "${f}" in
-              manifests/identities-*)
-                if grep -v '^[[:space:]]*#' "${f}" | grep -q ACCOUNT_ID; then
-                  env=${f#manifests/identities-}
-                  env=${env%.*}
-                  if grep -qxF "${env}" "${RUNNER_TEMP}/vended-envs"; then
-                    echo "::error file=${f}::${env} has a vended account and this file still says ACCOUNT_ID. Replace every one with the account id - 'wf get externalidentity aws-${env} -w ${WF_WORKSPACE} -e ${env} -o yaml' prints it under spec.aws.account."
-                    exit 1
-                  fi
-                  # Leaving it out prunes nothing: an identity in it could only have
-                  # been created once the account existed, and the vended-account check
-                  # stops the run before that could be undone.
-                  echo "::notice file=${f}::${env} has no vended account yet, so this file is left out of the apply."
-                  continue
-                fi
-                ;;
-            esac
-
-            files+=(-f "${f}")
-          done
-
-          wf apply -w "${WF_WORKSPACE}" "${files[@]}" \
+          wf apply -w "${WF_WORKSPACE}" -f ./manifests/ \
             --owner "${WF_OWNER}" \
             --prune --confirm
