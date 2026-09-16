@@ -64,10 +64,10 @@ Two pieces, and a new identity needs both in the same pull request:
 | `manifests/identities-<environment>.yaml` | The `ExternalIdentity` naming that role, and who may use it |
 
 The role's name and ARN are decided by the plan, not discovered, so the manifest writes
-them out. **Fill in `ACCOUNT_ID` after the account is vended**, in the same pull request
-that records it in `environments.yaml`. Until then CI leaves the file out of `wf apply`
-and says so; once the environment has an account and the placeholder is still there, CI
-fails instead.
+them out. It ships **commented out**, because the account it names does not exist when
+the repository is created. **After the vend, uncomment it and fill in the account id**, in
+the same pull request that records the account in `environments.yaml`. Until then
+`wf apply` skips the file as not a Wayfinder resource, and says so in the CI log.
 
 ## Authentication
 
