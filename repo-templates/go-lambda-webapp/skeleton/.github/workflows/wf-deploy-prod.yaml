@@ -10,8 +10,8 @@
 #   1. `environment: production` — GitHub's own gate. Configure reviewers and
 #      wait timers on the environment. It also scopes the OIDC token to
 #      `repo:<owner>/<repo>:environment:production`, which is what the
-#      production service account credential trusts, so the gate is enforced by
-#      the token, not only by the UI.
+#      production service account credential trusts, so a job that skipped the
+#      reviewers would be refused a token, not merely warned about in the UI.
 #
 #   2. `--require-approval` — Wayfinder's gate on the infrastructure plan. Each
 #      CloudResource is planned and pauses for approval. Opt in by setting the
