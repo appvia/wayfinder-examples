@@ -10,6 +10,17 @@
 # able to deploy to production. Nothing long-lived is stored in the repository —
 # GitHub mints a short-lived identity token per workflow run and Wayfinder
 # exchanges it, so there is no secret to leak or rotate.
+#
+# THE TRUST IS DESCRIBED BY CLAIMS, NOT BY THE SUBJECT, and that is not a style
+# choice. GitHub issues repositories created from a template an IMMUTABLE OIDC
+# subject carrying numeric ids:
+#
+#   repo:acme@33072293/payments@12345678:environment:production
+#
+# `wf create serviceaccountcredential --github-repo` builds `repo:acme/payments:…`,
+# which can never match that. So the subject here is a prefix wildcard covering
+# both forms, and the exact-match claims below are what actually pin the trust to
+# one repository and one stage.
 set -euo pipefail
 
 TENANT="${TENANT:?set TENANT, e.g. acme}"
@@ -21,12 +32,16 @@ DEVELOP_ENV="${DEVELOP_ENV:-dev}"
 PREVIEW_ENV="${PREVIEW_ENV:-dev}"
 PROD_ENV="${PROD_ENV:-prod}"
 
-# account name : environment : the GitHub subject restriction it trusts
+ISSUER="https://token.actions.githubusercontent.com"
+# Matches both `repo:acme/payments:…` and `repo:acme@33072293/payments@12345678:…`.
+SUBJECT="repo:${REPO%%/*}*"
+
+# account name : environment : the claims it requires beyond the repository
 #
-# --github-pull-request  matches only workflow runs triggered by a pull request.
-# --github-environment   matches only a job that declares that environment, so
-#                        the GitHub approval gate is enforced by the token
-#                        itself rather than only by the UI.
+# event_name=pull_request  matches only workflow runs triggered by a pull request.
+# environment=<name>       matches only a job that declares that environment, so
+#                          the GitHub approval gate is enforced by the token
+#                          itself rather than only by the UI.
 create() {
   local name="$1" env="$2"
   shift 2
@@ -36,7 +51,9 @@ create() {
 
   wf create serviceaccountcredential "github" \
     --service-account "${TENANT}:${WORKSPACE}:${name}" \
-    --github-repo "${REPO}" \
+    --issuer "${ISSUER}" \
+    --subject "${SUBJECT}" \
+    --claim "repository=${REPO}" \
     "$@"
 
   wf grant role deployer \
@@ -44,20 +61,25 @@ create() {
     -w "${WORKSPACE}" -e "${env}"
 }
 
-create "${SERVICE}-ci-preview" "${PREVIEW_ENV}" --github-pull-request
-create "${SERVICE}-ci-develop" "${DEVELOP_ENV}" --github-environment develop
-create "${SERVICE}-ci-prod" "${PROD_ENV}" --github-environment production
+create "${SERVICE}-ci-preview" "${PREVIEW_ENV}" --claim "event_name=pull_request"
+create "${SERVICE}-ci-develop" "${DEVELOP_ENV}" --claim "environment=develop"
+create "${SERVICE}-ci-prod" "${PROD_ENV}" --claim "environment=production"
 
-cat <<EOF
+# Wayfinder.yaml refers to its plans as file:plans/…, and Wayfinder publishes
+# each one to the workspace catalogue as it deploys — including on the dry run
+# the validate job does. The deployer role does not carry that, so every account
+# that runs a deploy or a dry run needs it as well, at workspace scope.
+for stage in preview develop prod; do
+  wf grant role workspace.cataloguemanagement \
+    --to "ServiceAccount:${TENANT}:${WORKSPACE}:${SERVICE}-ci-${stage}" \
+    -w "${WORKSPACE}"
+done
 
-Done. Two things are still needed before CI can deploy:
+cat <<MSG
 
-  1. The preview account needs catalogue write in ${WORKSPACE}. Wayfinder.yaml
-     refers to its plan as file:plans/..., which publishes that plan to the
-     workspace catalogue — including on the dry run the validate job does.
-     Grant it, or point the storagePlan input at a catalogue reference instead.
+Done. One thing is still needed before CI can deploy:
 
-  2. GitHub environments named 'develop' and 'production' must exist on
-     ${REPO}, with your reviewers on 'production'. Without them GitHub will not
-     mint the environment-scoped token these credentials trust.
-EOF
+  GitHub environments named 'develop' and 'production' must exist on ${REPO},
+  with your reviewers on 'production'. Without them GitHub will not mint the
+  environment-scoped token these credentials trust.
+MSG

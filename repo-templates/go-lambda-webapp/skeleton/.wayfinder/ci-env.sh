@@ -14,7 +14,7 @@
 #   WAYFINDER_TENANT, WAYFINDER_WORKSPACE, WAYFINDER_ENVIRONMENT
 #   WAYFINDER_SERVICE_ACCOUNT  the CLI authenticates with this implicitly
 #   WF_INSTANCE                the stack instance for this stage
-#   WF_DEPLOY_ARGS_FILE        --target/--identity/--region/--dns-zone flags
+#   WF_DEPLOY_ARGS_FILE        --identity/--region/--dns-zone flags
 #   plus everything in .wayfinder/ci.env
 set -euo pipefail
 
@@ -65,19 +65,26 @@ fi
 args_file="${RUNNER_TEMP:-/tmp}/wf-deploy-args"
 : >"${args_file}"
 
-# A cluster in the workspace and environment already selected above, narrowed to
-# a namespace named after the instance so each deployment is isolated.
-if [[ -n "${WF_HOST_CLUSTER:-}" ]]; then
-  printf '%s\n' "--target" "k8s:${WF_HOST_CLUSTER}:${instance}" >>"${args_file}"
+# The identity Wayfinder opens the cloud account with. Wayfinder reads which
+# account that identity reaches, so no separate --target is needed.
+#
+# The default is the name a Wayfinder account vend gives the identity it creates
+# for an environment: `aws-<environment>`, scoped to that environment in this
+# workspace. Set the WF_IDENTITY variable to name a different one — an account
+# you brought yourself, or one identity shared by every environment.
+identity="${WF_IDENTITY:-${workspace}/${environment}/aws-${environment}}"
+printf '%s\n' "--identity" "${identity}" >>"${args_file}"
+
+# AWS has no default region, so a deploy without this fails on the first
+# resource rather than here.
+if [[ -z "${WF_REGION:-}" ]]; then
+  echo "::error::No region. Set the WF_REGION repository or organisation variable (e.g. eu-west-2)."
+  exit 1
 fi
-# The cloud identity Wayfinder provisions cloud resources through. Wayfinder
-# reads the account it reaches, so no separate --target is needed for the cloud.
-if [[ -n "${WF_IDENTITY:-}" ]]; then
-  printf '%s\n' "--identity" "${WF_IDENTITY}" >>"${args_file}"
-fi
-if [[ -n "${WF_REGION:-}" ]]; then
-  printf '%s\n' "--region" "${WF_REGION}" >>"${args_file}"
-fi
+printf '%s\n' "--region" "${WF_REGION}" >>"${args_file}"
+
+# Only when a zone is set. Without one the web app answers on CloudFront's own
+# *.cloudfront.net domain, which needs no Route53 zone and no certificate.
 if [[ -n "${WF_DNS_ZONE:-}" ]]; then
   printf '%s\n' "--dns-zone" "${WF_DNS_ZONE}" >>"${args_file}"
 fi
@@ -96,3 +103,4 @@ fi
 
 echo "Stage ${stage}: instance ${instance} in ${WF_TENANT}:${workspace}:${environment}"
 echo "Deploying as service account ${WF_TENANT}:${workspace}:${account}"
+echo "Through identity ${identity} in ${WF_REGION}"
