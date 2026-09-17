@@ -1,0 +1,102 @@
+# On merge to main: apply this repository's manifests, and nothing else.
+#
+# `--prune` is what makes this repository authoritative — remove a manifest and
+# the object goes. It is scoped by BOTH --owner and the workspace, so it can only
+# ever reap what this repository created. `--confirm` is required because pruning
+# is destructive and would otherwise prompt.
+#
+# This job does NOT vend cloud accounts. An account is granted by the platform
+# team, who run their vending workflow against one of your environments; the
+# identity it creates is granted to a role, and manifests/bindings.yaml is where
+# you decide who holds that role. Ask for an account the way your platform team
+# asks to be asked — environments.yaml records which account each environment
+# expects, so it is the thing to point them at.
+#
+# What it DOES do, in an account you already hold, is create the IAM roles the
+# team's own identities assume — access/Wayfinder.yaml. That runs BEFORE the
+# manifests apply, and the order is not cosmetic: an ExternalIdentity naming a role
+# that does not exist gives up verifying after about ten attempts, and nothing
+# retries it afterwards.
+#
+# This file is copied into your repository verbatim — Wayfinder does not template
+# it. Per-repository values live in .wayfinder/ci.env.
+name: Apply
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  # Required: the Wayfinder CLI exchanges the Actions OIDC token for a Wayfinder
+  # one. Without id-token: write there is no token to exchange, and the CLI fails
+  # telling you so.
+  contents: read
+  id-token: write
+
+concurrency:
+  group: apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    # The Wayfinder toolbox, which already carries `wf` and `yq`, so no step here
+    # downloads either. This tag tracks the develop instance these templates are
+    # tested against, so the CLI matches the server it talks to.
+    container:
+      image: quay.io/appvia-wf-dev/wftoolbox:latest
+    # A container job's default shell is `sh`, not the `bash` a runner gives you,
+    # and both of this job's script steps build their arguments in an array — which
+    # `sh` rejects outright with a syntax error rather than misreading it.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Load the repository's Wayfinder context
+        run: grep -E '^[A-Z][A-Z0-9_]*=' .wayfinder/ci.env >> "$GITHUB_ENV"
+
+      # Runs before the manifests apply, so a role exists by the time an identity
+      # naming it is created.
+      #
+      # The env block is repeated on each step rather than set on the job: a job's
+      # own env is evaluated before any step runs, so WF_SERVER and the rest -
+      # written to $GITHUB_ENV by "Load the repository's Wayfinder context" -
+      # would all be empty there.
+      - name: Create the roles the team's identities assume
+        env:
+          # The GitHub variable wins over the scaffold-time value, so one
+          # installation-wide setting covers every repository. Both blank leaves
+          # the CLI on its own default, the SaaS API.
+          WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER || env.WF_SERVER }}
+          WAYFINDER_TENANT: ${{ env.WF_TENANT }}
+          WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
+        run: |
+          set -euo pipefail
+
+          for env in $(yq -r '.environments | keys | .[]' environments.yaml); do
+            if ! wf get externalidentity "aws-${env}" -w "${WF_WORKSPACE}" -e "${env}" >/dev/null 2>&1; then
+              echo "::notice::${env} has no vended account yet - ask your platform team to vend one against it"
+              continue
+            fi
+
+            region=$(yq -r ".environments.\"${env}\".region" environments.yaml)
+            wf deploy -f access/Wayfinder.yaml -i access \
+              -w "${WF_WORKSPACE}" -e "${env}" \
+              --identity "${WF_WORKSPACE}/${env}/aws-${env}" \
+              --region "${region}" \
+              --non-interactive
+          done
+
+      - name: Apply
+        env:
+          WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER || env.WF_SERVER }}
+          WAYFINDER_TENANT: ${{ env.WF_TENANT }}
+          WAYFINDER_SERVICE_ACCOUNT: ${{ env.WF_TENANT }}:${{ env.WF_WORKSPACE }}:${{ env.WF_SERVICE_ACCOUNT_NAME }}
+        run: |
+          set -euo pipefail
+
+          wf apply -w "${WF_WORKSPACE}" -f ./manifests/ \
+            --owner "${WF_OWNER}" \
+            --prune --confirm

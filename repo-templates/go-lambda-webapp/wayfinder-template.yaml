@@ -1,0 +1,185 @@
+# Go Lambda web app — the template itself.
+#
+# Parsed strictly: an unrecognised key here is an error, not a warning.
+# Everything under skeleton/ is what gets written into the new repository.
+#
+name: Go Lambda web app
+description: >-
+  A Go API running as a container on AWS Lambda behind API Gateway, a DynamoDB
+  table it reads and writes, and a single-page web app served by CloudFront that
+  talks to it. No cluster, and no hand-written IAM.
+
+inputs:
+  - name: serviceName
+    description: >-
+      Name of the service. Used for the Go module, the container image, the
+      stack and the deployed resources.
+    type: string
+    minLength: 2
+    maxLength: 40
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  - name: description
+    description: What this service does, recorded in its README and on the stack.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 200
+
+  # Left blank when the repository is scaffolded into the workspace it will deploy
+  # into, which is the usual case. CI falls back to the WF_WORKSPACE variable when
+  # it is empty.
+  - name: workspace
+    description: Wayfinder workspace this service deploys into.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 40
+
+  # The three environments the delivery pipeline deploys to. A pull request gets a
+  # preview instance, merging deploys develop, and a `v*` tag deploys production —
+  # see ../DELIVERY-PIPELINE.md.
+  - name: previewEnvironment
+    description: Environment a pull request's preview instance is deployed to.
+    type: string
+    optional: true
+    defaultValue: "dev"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: developEnvironment
+    description: Environment deployed to when a pull request merges.
+    type: string
+    optional: true
+    defaultValue: "dev"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: prodEnvironment
+    description: Environment deployed to when a `v*` tag is pushed.
+    type: string
+    optional: true
+    defaultValue: "prod"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: region
+    description: >-
+      AWS region this service deploys into. AWS has no default, so a deployment
+      without one fails on its first resource.
+    type: string
+    optional: true
+    defaultValue: "eu-west-2"
+    pattern: "^[a-z]{2}-[a-z]+-[0-9]$"
+
+# What the scaffolded repository needs in Wayfinder before its pipelines can sign
+# in: one service account per deployment environment, each trusted only by a
+# workflow run in THIS repository whose job declares that environment - so the
+# credential a pull request can use is not the one that reaches production.
+#
+# Wayfinder does not create these. Scaffolding renders them into manifests and
+# hands them to the person scaffolding, who applies them with their own token, so
+# a template can hand out no more access than they already hold. 'wf scaffold
+# coderepo' asks what to do with them; 'wf get coderepo NAME -w WORKSPACE
+# --configuration' answers again afterwards.
+#
+# The subject names the repository by id as well as by name, which is what stops
+# a renamed organisation handing somebody else a token this credential accepts.
+# Leave audiences out: Wayfinder stamps the tenant's own when the credential is
+# applied, and a template cannot know it.
+wayfinderServiceAccounts:
+  previewDeployer:
+    name: ${{ .Inputs.previewEnvironment }}-${{ .Repo.Name }}-preview
+    roles:
+      - role: deployer
+        workspace: ${{ .Workspace }}
+        environment: ${{ .Inputs.previewEnvironment }}
+      # Wayfinder.yaml names its plans as file:plans/..., which publishes each
+      # one to the workspace catalogue as it deploys - including on the dry run
+      # a pull request does.
+      - role: workspace.cataloguemanagement
+        workspace: ${{ .Workspace }}
+    trust:
+      issuer: https://token.actions.githubusercontent.com
+      subject: repo:${{ .Repo.Organization }}@${{ .Repo.OrganizationID }}/${{ .Repo.Name }}@${{ .Repo.ID }}:environment:preview
+
+  developDeployer:
+    name: ${{ .Inputs.developEnvironment }}-${{ .Repo.Name }}-develop
+    roles:
+      - role: deployer
+        workspace: ${{ .Workspace }}
+        environment: ${{ .Inputs.developEnvironment }}
+      - role: workspace.cataloguemanagement
+        workspace: ${{ .Workspace }}
+    trust:
+      issuer: https://token.actions.githubusercontent.com
+      subject: repo:${{ .Repo.Organization }}@${{ .Repo.OrganizationID }}/${{ .Repo.Name }}@${{ .Repo.ID }}:environment:develop
+
+  prodDeployer:
+    name: ${{ .Inputs.prodEnvironment }}-${{ .Repo.Name }}-prod
+    roles:
+      - role: deployer
+        workspace: ${{ .Workspace }}
+        environment: ${{ .Inputs.prodEnvironment }}
+      - role: workspace.cataloguemanagement
+        workspace: ${{ .Workspace }}
+    trust:
+      issuer: https://token.actions.githubusercontent.com
+      subject: repo:${{ .Repo.Organization }}@${{ .Repo.OrganizationID }}/${{ .Repo.Name }}@${{ .Repo.ID }}:environment:production
+
+# GitHub variables, set when the repository is created. The ones with no
+# githubEnvironment are repository-wide; the rest are set on that deployment
+# environment, so a job sees the ones belonging to the environment it declares
+# and no others. These names are what .github/workflows/ reads.
+#
+# Every environment named here is created on the repository, which is what lets a
+# job declare it - so an environment a service account trusts must be named by at
+# least one variable.
+repository:
+  variables:
+    - name: WAYFINDER_SERVER
+      value: ${{ .Wayfinder.Server }}
+    - name: WF_REGION
+      value: ${{ .Inputs.region }}
+
+    - name: WAYFINDER_SERVICE_ACCOUNT
+      value: ${{ .ServiceAccounts.previewDeployer.Ref }}
+      githubEnvironment: preview
+    - name: WAYFINDER_ENVIRONMENT
+      value: ${{ .Inputs.previewEnvironment }}
+      githubEnvironment: preview
+
+    - name: WAYFINDER_SERVICE_ACCOUNT
+      value: ${{ .ServiceAccounts.developDeployer.Ref }}
+      githubEnvironment: develop
+    - name: WAYFINDER_ENVIRONMENT
+      value: ${{ .Inputs.developEnvironment }}
+      githubEnvironment: develop
+
+    - name: WAYFINDER_SERVICE_ACCOUNT
+      value: ${{ .ServiceAccounts.prodDeployer.Ref }}
+      githubEnvironment: production
+    - name: WAYFINDER_ENVIRONMENT
+      value: ${{ .Inputs.prodEnvironment }}
+      githubEnvironment: production
+
+skeleton:
+  path: skeleton
+
+  # Files copied byte for byte. Their contents are NOT rendered, so they must not
+  # use the `$${{ }}` escape either — it would land literally.
+  #
+  # The workflows are full of GitHub Actions' own ${{ }} expressions and ordinary
+  # shell ${VAR}, so keeping them raw means they are valid exactly as written, here
+  # and in the generated repository. Per-repository values reach them through
+  # .wayfinder/ci.env, which IS rendered.
+  #
+  # These globs are matched with path.Match: `**` is not supported, and `*.yaml`
+  # does not match `*.yml`, which is why both are listed.
+  raw:
+    - ".github/workflows/*.yaml"
+    - ".github/workflows/*.yml"
+    - ".wayfinder/*.sh"
+    # The plans are Wayfinder's own template language throughout. Rendering them
+    # here would consume every expression in them.
+    - "plans/*.yaml"
+    # Lock files: large, and nothing in them to render.
+    - "go.sum"
+    - "web/package-lock.json"

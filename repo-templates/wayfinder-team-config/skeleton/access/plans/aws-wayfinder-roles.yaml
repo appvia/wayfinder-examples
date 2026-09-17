@@ -1,0 +1,177 @@
+# IAM roles in this environment's vended account, one per Wayfinder identity the team
+# wants there.
+#
+# ── WHY A TEAM MAY DO THIS AT ALL ─────────────────────────────────────────────
+#
+# The team already holds administrator access in this account, through the
+# `aws-<environment>` identity the vend granted it. A role created here can only ever
+# be trusted from Wayfinder's OIDC provider in that same account, so declaring more
+# identities widens nothing: the team could create the same role by hand with the
+# access it already has. What it still cannot reach is another team's account, or the
+# platform's own identities.
+#
+# ── THE TRUST POLICY IS NOT A CHOICE ──────────────────────────────────────────
+#
+# Wayfinder computes the issuer, audience and subject a role must assert in
+# GetExternalIdentityOIDCTrust (server/org/services/identity/cloudtokens.go). A role
+# whose trust says anything else is created successfully and then never assumed - the
+# ExternalIdentity naming it stays unverified. The three values, in that file's terms:
+#
+#   issuer    the instance's public API URL with the scheme and any trailing slash
+#             removed, e.g. "api.develop.test.wayfinder.run" - both the OIDC provider's
+#             own identity and the prefix of the two condition keys
+#   audience  "wayfinder:aws:<account-id>" - per cloud and account, so a token minted
+#             for one account cannot be replayed against another
+#   subject   "wayfinder:<tenant>:<workspace>/<environment>/<name>" for an
+#             environment-scoped identity, which is what the manifests here create
+#
+# The audience is per account rather than per identity, so every role this plan creates
+# asserts the same audience the vend's `wf-deploy` role does - and the account's OIDC
+# provider, which lists that one audience as its only client ID, already accepts them.
+# That is why this plan looks the provider up rather than creating one.
+#
+# ── INLINE TERRAFORM, NO MODULE ───────────────────────────────────────────────
+#
+# Three resources and a data lookup. A module would add a version to keep in step for
+# no reduction in what anyone has to read.
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-wayfinder-roles
+  version: "0.1.0"
+spec:
+  cloud: aws
+  description: Creates one IAM role per Wayfinder identity in this environment's AWS account, each trusting only the Wayfinder OIDC subject of the identity that names it.
+
+  inputs:
+    - name: identities
+      description: >-
+        The identities to create roles for. Each entry takes `name` (the ExternalIdentity
+        name, which is also the last field of the role's OIDC subject),
+        `managedPolicyArns` (AWS managed or customer managed policies to attach) and an
+        optional `inlinePolicyJson` (a policy document for anything no managed policy
+        covers). The role is named wf-<workspace>-<environment>-<name>, and AWS caps an
+        IAM role name at 64 characters, so a long workspace and environment leave less
+        for the name.
+      type: json
+      schema:
+        type: array
+        items:
+          type: object
+          required: [name, managedPolicyArns]
+          properties:
+            name: { type: string }
+            managedPolicyArns:
+              type: array
+              items: { type: string }
+            inlinePolicyJson: { type: string }
+
+    - name: issuer_url
+      description: >-
+        This Wayfinder instance's public API URL, e.g.
+        "https://api.develop.test.wayfinder.run". The account's OIDC provider was created
+        to trust it during the vend, and this must name the same one - a role trusting a
+        provider that is not there fails to create.
+      type: string
+
+  outputs:
+    - name: role_arns
+      description: The ARN of each role created, keyed by identity name.
+      type: json
+
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          # Created by the vend, not here. Looking it up rather than creating it means a
+          # team cannot introduce a second provider trusting a different issuer.
+          data "aws_iam_openid_connect_provider" "wayfinder" {
+            url = "${{ .Inputs.issuer_url }}"
+          }
+
+          locals {
+            identities = { for i in ${{ .Inputs.identities | toJson }} : i.name => i }
+
+            # Host form - no scheme, no trailing slash. Computed exactly as the vending
+            # plan computes it, so the condition keys here and the provider created there
+            # are the same string.
+            issuer_host = replace(replace("${{ .Inputs.issuer_url }}", "https://", ""), "/", "")
+            audience    = "wayfinder:aws:${{ .Cloud.AWS.Account }}"
+
+            # One entry per role-and-policy pair, because an attachment is its own
+            # resource. The key holds both halves so removing one policy from one
+            # identity does not re-key every other attachment.
+            policy_attachments = {
+              for pair in flatten([
+                for name, identity in local.identities : [
+                  for arn in identity.managedPolicyArns : { name = name, arn = arn }
+                ]
+              ]) : "${pair.name}|${pair.arn}" => pair
+            }
+
+            tags = {
+              ManagedBy             = "wayfinder"
+              wayfinder-stack       = "${{ .Workspace }}/${{ .Environment }}/${{ .Stack.Instance.Name }}"
+              wayfinder-tenant      = "${{ .Tenant }}"
+              wayfinder-workspace   = "${{ .Workspace }}"
+              wayfinder-environment = "${{ .Environment }}"
+              wayfinder-instance    = "${{ .Stack.Instance.Name }}"
+              wayfinder-component   = "${{ if .Stack.Component }}${{ .Stack.Component.Name }}${{ end }}"
+            }
+          }
+
+          resource "aws_iam_role" "identity" {
+            for_each = local.identities
+
+            name        = "wf-${{ .Workspace }}-${{ .Environment }}-${each.key}"
+            description = "Assumed by Wayfinder identity ${{ .Workspace }}/${{ .Environment }}/${each.key}"
+
+            # StringEquals on both claims, not StringLike. AWS takes a single audience,
+            # so there is no list to widen and no wildcard to get wrong.
+            assume_role_policy = jsonencode({
+              Version = "2012-10-17"
+              Statement = [{
+                Effect    = "Allow"
+                Principal = { Federated = data.aws_iam_openid_connect_provider.wayfinder.arn }
+                Action    = "sts:AssumeRoleWithWebIdentity"
+                Condition = {
+                  StringEquals = {
+                    "${local.issuer_host}:aud" = local.audience
+                    "${local.issuer_host}:sub" = "wayfinder:${{ .Tenant }}:${{ .Workspace }}/${{ .Environment }}/${each.key}"
+                  }
+                }
+              }]
+            })
+
+            tags = local.tags
+          }
+
+          resource "aws_iam_role_policy_attachment" "managed" {
+            for_each = local.policy_attachments
+
+            role       = aws_iam_role.identity[each.value.name].name
+            policy_arn = each.value.arn
+          }
+
+          # For anything no managed policy covers. An identity that leaves
+          # inlinePolicyJson out gets no such resource at all, rather than an empty one.
+          resource "aws_iam_role_policy" "inline" {
+            for_each = {
+              for name, identity in local.identities : name => identity
+              if try(identity.inlinePolicyJson, "") != ""
+            }
+
+            name   = "wayfinder-inline"
+            role   = aws_iam_role.identity[each.key].id
+            policy = each.value.inlinePolicyJson
+          }
+
+      - name: outputs.tf
+        template: |
+          # The ExternalIdentity manifests carry these ARNs as literals - they are
+          # deterministic from the account id and a name the team chose, so nothing flows
+          # from here into them. This output is for reading back what was made.
+          output "role_arns" {
+            description = "The ARN of each role created, keyed by identity name."
+            value       = { for name, role in aws_iam_role.identity : name => role.arn }
+          }

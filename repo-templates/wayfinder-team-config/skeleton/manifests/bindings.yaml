@@ -1,0 +1,68 @@
+# Who may deploy into each environment.
+#
+# ONE BINDING PER SUBJECT PER SCOPE, named `Kind:Name` — the convention Wayfinder
+# uses for the bindings it manages itself. Adding a deployer is copying the block
+# below and changing the two names; removing one is deleting it, which `--prune`
+# then acts on.
+#
+# Roles are assigned to people DIRECTLY rather than through a group. A group would
+# put the group's NAME in the middle of this: the platform's vending workflow would
+# have to grant the vended identity to a group by name, and renaming it here would
+# take away the team's cloud access with nothing failing at apply time. Granting a
+# ROLE instead removes that — the vend says "whoever holds deployer in this
+# environment", and this file is what decides who that is.
+#
+# `deployer` carries what a team needs inside one environment: deploy stacks, manage
+# cloud resources and kube resources, set environment variables, reach clusters.
+# WHERE THE OBJECT SITS IS WHAT DECIDES ITS SCOPE — `metadata.workspace` and
+# `metadata.environment` together confine it to that one environment. There is no
+# `scope:` field; moving the binding is how you change its reach.
+#
+# The line this repository holds is that a team may grant access WITHIN THE ACCOUNTS
+# VENDED TO IT, and nowhere else. It already holds administrator access in those
+# accounts through `aws-<environment>`, so the identities in identities-*.yaml widen
+# nothing: an identity can only trust a role the team is able to create, in an account
+# it already administers. What it still cannot do is reach another team's account or
+# edit the platform's own identities.
+#
+# Where that line sits is the platform team's choice, made in IAM when the account was
+# vended: the policy on the `wf-deploy` role either includes creating roles or it does
+# not, and a permissions boundary can allow it while capping what those roles may do.
+# An identity here that names a role the team could not create stays Unverified and
+# grants nothing.
+#
+# So a cloud account id and a role ARN do belong here, in identities-*.yaml - but only
+# ever this team's own. `aws-<environment>` itself stays out: the vend delivered it, and
+# a bad merge under --prune must not be able to remove the grant this CI deploys through.
+apiVersion: org/v3
+kind: RoleBinding
+metadata:
+  name: User:${{ .Inputs.teamLead }}
+  workspace: ${{ .Inputs.workspace }}
+  environment: ${{ .Inputs.firstEnvironment }}
+spec:
+  roles:
+    - deployer
+  # One subject, not a list. A second person is a second binding.
+  subject:
+    kind: User
+    name: ${{ .Inputs.teamLead }}
+
+# Add a deployer by copying the block, in both places:
+#
+# ---
+# apiVersion: org/v3
+# kind: RoleBinding
+# metadata:
+#   name: User:someone@example.com
+#   workspace: ${{ .Inputs.workspace }}
+#   environment: ${{ .Inputs.firstEnvironment }}
+# spec:
+#   roles:
+#     - deployer
+#   subject:
+#     kind: User
+#     name: someone@example.com
+#
+# A person must have accepted their invite to the tenant before a binding can name
+# them: with no User object there is nothing to bind to, and the apply fails saying so.

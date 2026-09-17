@@ -32,6 +32,20 @@ workflows do, the service accounts they need, and the GitHub variables to set.
 Read it before scaffolding one, because a template that deploys needs more
 groundwork than one that does not.
 
+## Platform configuration
+
+Not a service. This one scaffolds the repository a **platform team** hands to an
+application team, so that team can change its own environments and decide who may
+deploy into them, by pull request, without being able to grant itself cloud access.
+
+| Template | What it creates | What it shows |
+| -------- | --------------- | ------------- |
+| [`wayfinder-team-config/`](./wayfinder-team-config) | A team's platform configuration repository, with CI that plans on a pull request and applies with `--prune` on merge | Wayfinder objects as code, and CI that **invokes a workflow** — it reads an environment-to-account map and asks the platform to vend any cloud account that is missing |
+
+It is the second half of an onboarding flow: something has to create the workspace,
+the CI service account and its federated credential first. The `onboard-aws`
+example in the Wayfinder repository is that first half.
+
 ## Teaching examples
 
 Smaller templates that each demonstrate one mechanic, and are what the docs walk
