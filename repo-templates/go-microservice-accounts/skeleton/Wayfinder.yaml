@@ -1,0 +1,10 @@
+apiVersion: v1
+name: ${{ .Stack.Name }}
+description: "${{ .Inputs.description }}"
+
+components:
+  # A pure-provider S3 bucket published for consumers in this stack. Swap or
+  # extend with your own components once the repository is scaffolded.
+  storage:
+    type: CloudResource
+    plan: aws-s3-data-bucket@1.0.0

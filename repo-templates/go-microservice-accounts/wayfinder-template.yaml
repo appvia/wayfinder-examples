@@ -1,0 +1,49 @@
+name: Go microservice with service accounts
+description: >-
+  A minimal Go microservice scaffolded with a Wayfinder stack manifest, a
+  templated command package and a CI workflow. Used to exercise the Wayfinder
+  RepoTemplate scaffolding flow.
+inputs:
+  - name: serviceName
+    description: Name of the service (used for the module, binary and package directory)
+    type: string
+    pattern: "^[a-z][a-z0-9-]*$"
+    minLength: 2
+    maxLength: 40
+  - name: description
+    description: Short description of what the service does
+    type: string
+    optional: true
+    defaultValue: "A Go microservice scaffolded by Wayfinder"
+  - name: includeDocs
+    description: Include a docs/ directory in the generated repository
+    type: bool
+    optional: true
+    defaultValue: false
+skeleton:
+  path: skeleton
+  # The CI workflow uses GitHub Actions' native ${{ }} expressions, so its
+  # contents must pass through unrendered. Paths are still templated.
+  raw:
+    - ".github/workflows/*.yaml"
+
+# What the scaffolded repository needs in Wayfinder for its pipelines to sign
+# in. Two accounts deliberately: one a workspace contributor can grant, and one
+# that needs tenant ownership, so the create-stack form shows both a tick and a
+# cross.
+wayfinderServiceAccounts:
+  deployer:
+    name: ${{ .Repo.Name }}-deployer
+    roles:
+      - role: deployer
+        workspace: ${{ .Workspace }}
+    trust:
+      issuer: https://token.actions.githubusercontent.com
+      subject: repo:${{ .Repo.Organization }}@${{ .Repo.OrganizationID }}/${{ .Repo.Name }}@${{ .Repo.ID }}:environment:production
+  tenantAdmin:
+    name: ${{ .Repo.Name }}-admin
+    roles:
+      - role: tenant.owner
+    trust:
+      issuer: https://token.actions.githubusercontent.com
+      subject: repo:${{ .Repo.Organization }}@${{ .Repo.OrganizationID }}/${{ .Repo.Name }}@${{ .Repo.ID }}:environment:admin
