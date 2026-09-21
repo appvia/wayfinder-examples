@@ -5,6 +5,10 @@ name: Go library
 description: A Go module with tests and CI, for shared code rather than a deployable service
 icon: library
 
+# A library is a repository and nothing else: no Wayfinder.yaml, nothing
+# to deploy, and no stack to create alongside it.
+forStack: false
+
 inputs:
   - name: packageName
     description: Go package name, used for the directory and the package clause.

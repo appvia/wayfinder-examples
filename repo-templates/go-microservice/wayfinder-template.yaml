@@ -3,6 +3,10 @@ description: >-
   A minimal Go microservice scaffolded with a Wayfinder stack manifest, a
   templated command package and a CI workflow. Used to exercise the Wayfinder
   RepoTemplate scaffolding flow.
+# This template ships a Wayfinder.yaml, so the repository it scaffolds
+# belongs to a stack and the template reads ${{ .Stack.Name }}.
+forStack: true
+
 inputs:
   - name: serviceName
     description: Name of the service (used for the module, binary and package directory)
