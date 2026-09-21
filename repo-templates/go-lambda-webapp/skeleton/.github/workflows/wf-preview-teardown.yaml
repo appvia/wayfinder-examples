@@ -47,7 +47,9 @@ jobs:
           source .wayfinder/ci.env
 
           instance="${WF_SERVICE_NAME}-pr${PR_NUMBER}"
-          wf down --non-interactive --timeout 20m \
+          # Deleting a CloudFront distribution is as slow as creating one, and
+          # creating one measured 25m55s.
+          wf down --non-interactive --timeout 45m \
             -i "${instance}" \
             -e "${WAYFINDER_ENVIRONMENT}" \
             || echo "::warning::Teardown of ${instance} did not complete. Check for leftover resources with 'wf get stackinstance ${instance} -e ${WAYFINDER_ENVIRONMENT}'."

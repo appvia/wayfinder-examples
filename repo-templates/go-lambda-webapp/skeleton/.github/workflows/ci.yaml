@@ -153,7 +153,9 @@ jobs:
           instance="${WF_SERVICE_NAME}-pr${PR_NUMBER}"
           echo "WF_INSTANCE=${instance}" >> "$GITHUB_ENV"
 
-          wf deploy --non-interactive --timeout 30m \
+          # 45m, not 30m: creating the CloudFront distribution took 25m55s of a
+          # 29m50s deploy when this was measured, which left ten seconds in hand.
+          wf deploy --non-interactive --timeout 45m \
             -i "${instance}" \
             -e "${WAYFINDER_ENVIRONMENT}" \
             -f Wayfinder.yaml \
