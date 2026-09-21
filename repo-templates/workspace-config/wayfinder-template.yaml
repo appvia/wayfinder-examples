@@ -1,0 +1,47 @@
+# A repository that is not a stack, and still needs Wayfinder access.
+#
+# Having no stack says nothing about whether the repository's pipelines sign in.
+# This one holds a workspace's own configuration — the variables, secrets and
+# access its teams share — and its CI applies that configuration with `wf apply`.
+# So: no Wayfinder.yaml, no stack, and a service account all the same.
+name: Workspace configuration
+description: A repository holding one workspace's configuration, applied by its own CI
+icon: terraform
+
+# There is nothing to deploy, so there is no stack. The repository is the thing.
+forStack: false
+
+inputs:
+  - name: workspaceName
+    description: The workspace whose configuration this repository holds.
+    type: string
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+    minLength: 2
+    maxLength: 40
+
+  - name: description
+    description: One line saying what this configuration is for.
+    type: string
+    optional: true
+    defaultValue: "Configuration for a Wayfinder workspace"
+    maxLength: 200
+
+skeleton:
+  path: skeleton
+
+# The account this repository's pipelines sign in as. Named from the repository,
+# not the stack: there is no stack here to take a name from.
+wayfinderServiceAccounts:
+  configurer:
+    name: ${{ .Repo.Name }}-configurer
+    roles:
+      - role: workspace.manager
+        workspace: ${{ .Inputs.workspaceName }}
+    trust:
+      issuer: https://token.actions.githubusercontent.com
+      subject: repo:${{ .Repo.Organization }}@${{ .Repo.OrganizationID }}/${{ .Repo.Name }}@${{ .Repo.ID }}:environment:apply
+
+repository:
+  variables:
+    - name: WF_WORKSPACE
+      value: ${{ .Inputs.workspaceName }}

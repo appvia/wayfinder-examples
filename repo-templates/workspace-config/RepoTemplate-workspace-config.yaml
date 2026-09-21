@@ -1,0 +1,34 @@
+# A repository holding one workspace's configuration, applied by its own CI.
+#
+# This is the object you give Wayfinder. It is a POINTER: it says which
+# repository, which branch or tag, and which directory inside it. The template
+# itself — its name, inputs and files — is `wayfinder-template.yaml` at that
+# path, which Wayfinder reads once it has followed this. See ../ANATOMY.md.
+#
+#   wf apply -f RepoTemplate-workspace-config.yaml
+#   wf get repotemplate workspace-config -o yaml   # check status.manifest synced
+#   wf create coderepo team-config --from-template workspace-config \
+#     --input workspaceName=team -w team
+#
+# Note the command: this template is not for a stack, so it is scaffolded with
+# `wf create coderepo` rather than `wf create stack`.
+apiVersion: sourcecontrol/v3
+kind: RepoTemplate
+metadata:
+  name: workspace-config
+  # Free-form axes for filtering the catalogue. Classification is spec.category.
+  labels:
+    language: none
+    framework: none
+    family: wayfinder-example
+spec:
+  # Public repository, so Wayfinder clones it anonymously — registering needs no
+  # GitHub connection. Creating a repository from it does.
+  url: https://github.com/appvia/wayfinder-examples.git
+  # The directory holding wayfinder-template.yaml. One repository can host many
+  # templates, each registered separately.
+  path: repo-templates/workspace-config
+  # Branch or tag to read. Pin this to a tag to hold the template steady.
+  ref: main
+  displayName: Workspace configuration
+  category: pipeline
