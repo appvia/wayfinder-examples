@@ -40,8 +40,3 @@ wayfinderServiceAccounts:
     trust:
       issuer: https://token.actions.githubusercontent.com
       subject: repo:${{ .Repo.Organization }}@${{ .Repo.OrganizationID }}/${{ .Repo.Name }}@${{ .Repo.ID }}:environment:apply
-
-repository:
-  variables:
-    - name: WF_WORKSPACE
-      value: ${{ .Inputs.workspaceName }}
