@@ -53,9 +53,9 @@ case "${stage}" in
     ;;
 esac
 
-# The workspace is a scaffold-time input. Where it was left blank, fall back to
-# the WF_WORKSPACE repository or organisation variable, which is the better
-# place for it when one workspace serves many repositories.
+# The workspace the repository was scaffolded into, from .wayfinder/ci.env. A
+# repository written by hand has nothing there, and takes the workspace from the
+# WF_WORKSPACE repository or organisation variable instead.
 workspace="${WF_WORKSPACE:-${WF_WORKSPACE_VAR:-}}"
 if [[ -z "${workspace}" ]]; then
   echo "::error::No Wayfinder workspace. Set the WF_WORKSPACE repository or organisation variable."

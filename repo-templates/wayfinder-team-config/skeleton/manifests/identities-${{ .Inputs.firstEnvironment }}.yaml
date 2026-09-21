@@ -5,7 +5,7 @@
 # header, the repository was created before the account existed: `wf apply` skips a
 # file with no resource in it, and once the account is vended you add the identities
 # here yourself, in the pull request that records the account in ../environments.yaml.
-# `wf get externalidentity aws-${{ .Inputs.firstEnvironment }} -w ${{ .Inputs.workspace }} -e ${{ .Inputs.firstEnvironment }} -o yaml`
+# `wf get externalidentity aws-${{ .Inputs.firstEnvironment }} -w ${{ .Workspace }} -e ${{ .Inputs.firstEnvironment }} -o yaml`
 # prints the id under spec.aws.account.
 #
 # The role ARNs are written out rather than read back from Terraform. A role's name is
@@ -26,14 +26,14 @@ ${{ if .Inputs.accountId }}apiVersion: integrations/v3
 kind: ExternalIdentity
 metadata:
   name: aws-readonly
-  workspace: ${{ .Inputs.workspace }}
+  workspace: ${{ .Workspace }}
   environment: ${{ .Inputs.firstEnvironment }}
 spec:
   type: AWSIAMRole
   description: Read the ${{ .Inputs.firstEnvironment }} account without being able to change it.
   aws:
     account: "${{ .Inputs.accountId }}"
-    roleARN: arn:aws:iam::${{ .Inputs.accountId }}:role/wf-${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-aws-readonly
+    roleARN: arn:aws:iam::${{ .Inputs.accountId }}:role/wf-${{ .Workspace }}-${{ .Inputs.firstEnvironment }}-aws-readonly
     defaultRegion: ${{ .Inputs.region }}
   usableFor:
     - directaccess
@@ -51,14 +51,14 @@ apiVersion: integrations/v3
 kind: ExternalIdentity
 metadata:
   name: module-upgrade-inspector
-  workspace: ${{ .Inputs.workspace }}
+  workspace: ${{ .Workspace }}
   environment: ${{ .Inputs.firstEnvironment }}
 spec:
   type: AWSIAMRole
   description: Read-only access for the module-upgrade-prove agent to check a resource survived an upgrade.
   aws:
     account: "${{ .Inputs.accountId }}"
-    roleARN: arn:aws:iam::${{ .Inputs.accountId }}:role/wf-${{ .Inputs.workspace }}-${{ .Inputs.firstEnvironment }}-module-upgrade-inspector
+    roleARN: arn:aws:iam::${{ .Inputs.accountId }}:role/wf-${{ .Workspace }}-${{ .Inputs.firstEnvironment }}-module-upgrade-inspector
     defaultRegion: ${{ .Inputs.region }}
   usableFor:
     - directaccess

@@ -41,18 +41,6 @@ inputs:
     defaultValue: ""
     maxLength: 60
 
-  # The scaffold context has no workspace, so CI needs to be told which one to
-  # deploy into. Leave blank to fall back to the WF_WORKSPACE GitHub variable,
-  # which is the better choice when one workspace serves many repositories.
-  - name: workspace
-    description: >-
-      Wayfinder workspace CI deploys into. Leave blank to take it from the
-      WF_WORKSPACE GitHub repository or organisation variable instead.
-    type: string
-    optional: true
-    defaultValue: ""
-    pattern: "^([a-z][a-z0-9-]*[a-z0-9])?$"
-
   - name: developEnvironment
     description: Environment deployed to on every merge to the default branch.
     type: string

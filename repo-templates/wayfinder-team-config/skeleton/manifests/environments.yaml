@@ -9,6 +9,6 @@ apiVersion: org/v3
 kind: Environment
 metadata:
   name: ${{ .Inputs.firstEnvironment }}
-  workspace: ${{ .Inputs.workspace }}
+  workspace: ${{ .Workspace }}
 spec:
   description: ${{ .Inputs.firstEnvironment }} environment for ${{ .Inputs.team }}

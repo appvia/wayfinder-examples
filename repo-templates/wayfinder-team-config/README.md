@@ -146,7 +146,7 @@ wf apply -f RepoTemplate-wayfinder-team-config.yaml
 
 wf create coderepo wayfinder-payments -w payments \
   --from-template wayfinder-team-config \
-  --input team=payments --input workspace=payments \
+  --input team=payments \
   --input serviceAccount=wayfinder-payments-ci \
   --dry-run
 ```
@@ -161,7 +161,7 @@ and calls do not exist yet:
 
 | | |
 | --- | --- |
-| The workspace and the first environment | named by `workspace` and `firstEnvironment` |
+| The workspace and the first environment | named by `-w` on the create, and by `firstEnvironment` |
 | A CI service account, with a **federated** credential pinned to `refs/heads/main` | named by `serviceAccount` |
 | A `deployer` role binding for that service account in the workspace | so `wf apply` may write |
 

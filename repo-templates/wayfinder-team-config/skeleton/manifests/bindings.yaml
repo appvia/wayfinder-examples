@@ -38,7 +38,7 @@ apiVersion: org/v3
 kind: RoleBinding
 metadata:
   name: User:${{ .Inputs.teamLead }}
-  workspace: ${{ .Inputs.workspace }}
+  workspace: ${{ .Workspace }}
   environment: ${{ .Inputs.firstEnvironment }}
 spec:
   roles:
@@ -55,7 +55,7 @@ spec:
 # kind: RoleBinding
 # metadata:
 #   name: User:someone@example.com
-#   workspace: ${{ .Inputs.workspace }}
+#   workspace: ${{ .Workspace }}
 #   environment: ${{ .Inputs.firstEnvironment }}
 # spec:
 #   roles:

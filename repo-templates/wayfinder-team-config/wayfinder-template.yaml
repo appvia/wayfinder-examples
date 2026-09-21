@@ -20,19 +20,6 @@ inputs:
     maxLength: 40
     pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
 
-  # Named separately from `team` on purpose. The vending workflow builds the
-  # OIDC subject's third field from the WORKSPACE, so a team-ish alias that did
-  # not match a real workspace would produce a trust nothing can use. They
-  # usually hold the same value; conflating them hides the one case that breaks.
-  - name: workspace
-    description: >-
-      Wayfinder workspace the team's objects live in. Normally the same as the
-      team name.
-    type: string
-    minLength: 2
-    maxLength: 40
-    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
-
   - name: serviceAccount
     description: >-
       Name of the CI service account this repository authenticates as, created

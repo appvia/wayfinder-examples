@@ -26,16 +26,6 @@ inputs:
     defaultValue: ""
     maxLength: 200
 
-  # Left blank when the repository is scaffolded into the workspace it will deploy
-  # into, which is the usual case. CI falls back to the WF_WORKSPACE variable when
-  # it is empty.
-  - name: workspace
-    description: Wayfinder workspace this service deploys into.
-    type: string
-    optional: true
-    defaultValue: ""
-    maxLength: 40
-
   # The three environments the delivery pipeline deploys to. A pull request gets a
   # preview instance, merging deploys develop, and a `v*` tag deploys production —
   # see ../DELIVERY-PIPELINE.md.

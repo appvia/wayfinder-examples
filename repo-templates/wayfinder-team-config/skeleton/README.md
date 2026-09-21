@@ -5,7 +5,7 @@ platform configuration. Change it by pull request.
 
 | | |
 |---|---|
-| **Workspace** | `${{ .Inputs.workspace }}` |
+| **Workspace** | `${{ .Workspace }}` |
 | **Repository** | [`${{ .Repo.Organization }}/${{ .Repo.Name }}`](https://github.com/${{ .Repo.Organization }}/${{ .Repo.Name }}) |
 | **Tenant** | `${{ .Tenant }}` |
 
