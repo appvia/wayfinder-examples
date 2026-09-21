@@ -49,13 +49,21 @@ MANIFEST = sys.argv[2]
 # generic placeholder might not be.
 NAME_LIKE = {"serviceName", "packageName", "name", "appName", "moduleName"}
 
+# Everything Wayfinder's render context exposes to a skeleton, so a template
+# that reads any of it renders here too. The list is RenderOptions in
+# server/sourcecontrol/services/repotemplates/render.go in the wayfinder
+# repository, and is written out in ../ANATOMY.md.
 CONTEXT = {
     ".Repo.Organization": "example-org",
     ".Repo.Name": "example-service",
     ".Repo.URL": "https://github.com/example-org/example-service",
     ".Repo.DefaultBranch": "main",
+    ".Repo.ID": "4242",
+    ".Repo.OrganizationID": "7",
     ".Stack.Name": "example",
     ".Tenant": "example-tenant",
+    ".Workspace": "example-workspace",
+    ".Wayfinder.Server": "https://api.example.wayfinder.run",
 }
 
 

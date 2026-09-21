@@ -16,6 +16,7 @@
 # ubuntu runner already has and the toolbox image does not.
 set -euo pipefail
 
+# shellcheck source=ci.env disable=SC1091
 source .wayfinder/ci.env
 
 version="${WF_CLI_VERSION:-}"
