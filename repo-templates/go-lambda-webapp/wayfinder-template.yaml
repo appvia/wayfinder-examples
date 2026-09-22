@@ -9,6 +9,9 @@ description: >-
   table it reads and writes, and a single-page web app served by CloudFront that
   talks to it. No cluster, and no hand-written IAM.
 
+# The repository ships a Wayfinder.yaml and the stack is the point of it.
+forStack: true
+
 inputs:
   - name: serviceName
     description: >-

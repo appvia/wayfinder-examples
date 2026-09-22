@@ -10,6 +10,10 @@ description: >-
   vending. Applied with `wf apply --prune`, so the repository is the source of
   truth for everything it declares.
 
+# No Wayfinder.yaml and nothing to deploy: its CI applies manifests with
+# `wf apply`. A stack created alongside it would be empty and stay that way.
+forStack: false
+
 inputs:
   - name: team
     description: >-
