@@ -19,9 +19,9 @@ metadata:
 spec:
   url: https://github.com/appvia/wayfinder-examples.git
   path: repo-templates/go-lambda-webapp
-  # The branch this template is being built on. It moves to `main`, and then to a
-  # tag, once the shape has settled — tracking a branch means every merge changes
-  # the template for everyone on their next resync.
-  ref: add-workspace-repo-template
+  # Tracking a branch means every merge to it changes the template for the next
+  # team onboarded. `main` is the right place for that while the golden path is
+  # still moving; pin a tag once it has settled.
+  ref: main
   displayName: Go Lambda web app
   category: service
