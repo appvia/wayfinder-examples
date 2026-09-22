@@ -34,7 +34,11 @@
 # from a changed tree keeps the image already in ECR unless you set
 # FORCE_BUILD=1.
 apiVersion: v1
-name: ${{ .Inputs.serviceName }}
+# The stack this repository belongs to, which is named when the repository is
+# created and is not the service name: an app called "spaceprocessor" can sit in
+# a stack called "space-processor". Naming it from serviceName made the stack
+# definition disagree with the Stack it deploys as.
+name: ${{ .Stack.Name }}
 description: "${{ .Inputs.description }}"
 
 components:
