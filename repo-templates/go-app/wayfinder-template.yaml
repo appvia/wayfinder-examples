@@ -10,6 +10,10 @@ description: >-
   on merge, and deploy to production on a tag.
 icon: go
 
+# This template ships a Wayfinder.yaml, so the repository it scaffolds
+# belongs to a stack and the template reads ${{ .Stack.Name }}.
+forStack: true
+
 inputs:
   # The only required input. Everything else has a default so the template can
   # be scaffolded from the catalogue, or from CI with --no-input, by supplying

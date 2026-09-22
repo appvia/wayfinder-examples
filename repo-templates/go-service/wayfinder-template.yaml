@@ -2,6 +2,10 @@ name: Go service with Helm chart
 description: A Go HTTP service with its own Helm chart, a CI pipeline and a deployable Wayfinder.yaml
 icon: go
 
+# This template ships a Wayfinder.yaml, so the repository it scaffolds
+# belongs to a stack and the template reads ${{ .Stack.Name }}.
+forStack: true
+
 inputs:
   - name: serviceName
     description: Name of the service. Used for the module, the binary, the chart release and the deployed component.
