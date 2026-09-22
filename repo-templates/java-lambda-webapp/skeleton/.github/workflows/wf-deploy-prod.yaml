@@ -1,0 +1,180 @@
+# Deploys a tagged release to production.
+#
+# Every job checks out the tag rather than the branch head, so the tests, the
+# image and the Wayfinder.yaml that is deployed all come from the tagged tree.
+# RELEASE is the tag itself, so the image production runs carries the tag as
+# its name and /api/healthz reports it.
+#
+# There are two independent gates:
+#
+#   1. `environment: production` — GitHub's own gate. Configure reviewers and
+#      wait timers on the environment. It also scopes the OIDC token to
+#      `repo:<owner>/<repo>:environment:production`, which is what the
+#      production service account trusts, so a job that skipped the reviewers
+#      would be refused a token, not merely warned about in the UI.
+#
+#   2. `--require-approval` — Wayfinder's gate on the infrastructure plan. Each
+#      CloudResource is planned and pauses for approval. Opt in by setting the
+#      WF_PROD_REQUIRE_APPROVAL variable to `true`.
+#
+# Production can deploy through a different cloud account, region or DNS zone
+# from the rest: set WF_IDENTITY, WF_REGION or WF_DNS_ZONE on the production
+# environment and that value wins over the repository-wide one.
+#
+# The image is built by the stack's `pushimage` component rather than here — see
+# the note at the top of ci.yaml for why that means this job runs on a plain
+# ubuntu runner and not in a container.
+#
+# This file is copied into your repository verbatim — Wayfinder does not
+# template it. The deploy job reads the WAYFINDER_* variables Wayfinder set on
+# the production environment when it created this repository.
+name: Deploy to production
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      # The pom compiles for Java 21. The runner ships one, but defaults to an
+      # older JDK; this puts 21 first and caches the Maven repository.
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Test
+        run: make test
+
+      - name: Lint
+        run: make lint
+
+  deploy:
+    name: Deploy
+    needs: [test]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_SERVICE_ACCOUNT }}
+      WAYFINDER_ENVIRONMENT: ${{ vars.WAYFINDER_ENVIRONMENT }}
+      WF_REGION: ${{ vars.WF_REGION }}
+      WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+      WF_DNS_ZONE: ${{ vars.WF_DNS_ZONE }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Install the Wayfinder CLI
+        run: bash .wayfinder/install-wf.sh
+
+      - name: Verify the Wayfinder identity
+        run: wf whoami
+
+      # Guards against a misconfigured WAYFINDER_SERVER pointing production
+      # traffic at the wrong Wayfinder installation. Set WF_EXPECT_INSTANCE_ID
+      # to the value of `wf serverinfo -o json | jq -r .instanceIdentifier` for
+      # production.
+      - name: Verify the Wayfinder installation
+        if: vars.WF_EXPECT_INSTANCE_ID != ''
+        env:
+          EXPECTED: ${{ vars.WF_EXPECT_INSTANCE_ID }}
+        run: |
+          set -euo pipefail
+          actual="$(wf serverinfo -o json | jq -r .instanceIdentifier)"
+          if [[ "${actual}" != "${EXPECTED}" ]]; then
+            echo "::error::Expected Wayfinder installation '${EXPECTED}' but this is '${actual}'. Nothing was deployed."
+            exit 1
+          fi
+
+      - name: Deploy the release
+        env:
+          RELEASE: ${{ github.ref_name }}
+          REQUIRE_APPROVAL: ${{ vars.WF_PROD_REQUIRE_APPROVAL }}
+          APPROVAL_TIMEOUT: ${{ vars.WF_PROD_APPROVAL_TIMEOUT }}
+        run: |
+          set -euo pipefail
+          source .wayfinder/ci.env
+
+          # The cloud identity sits in the same workspace as the service
+          # account, which is the middle segment of tenant:workspace:name.
+          workspace="$(cut -d: -f2 <<<"${WAYFINDER_SERVICE_ACCOUNT}")"
+          args=(
+            --identity "${WF_IDENTITY:-${workspace}/${WAYFINDER_ENVIRONMENT}/aws-${WAYFINDER_ENVIRONMENT}}"
+            --region "${WF_REGION}"
+          )
+          # Without a zone the web app answers on CloudFront's own
+          # *.cloudfront.net domain, which needs no Route53 zone.
+          if [[ -n "${WF_DNS_ZONE:-}" ]]; then
+            args+=(--dns-zone "${WF_DNS_ZONE}")
+          fi
+
+          if [[ "${REQUIRE_APPROVAL:-false}" == "true" ]]; then
+            args+=("--require-approval")
+            if [[ -n "${APPROVAL_TIMEOUT:-}" ]]; then
+              args+=("--approval-timeout" "${APPROVAL_TIMEOUT}")
+            fi
+          fi
+
+          # One long-lived instance, redeployed on every tag. The name is
+          # passed on to the step that writes the summary.
+          instance="${WF_SERVICE_NAME}-prod"
+          echo "WF_INSTANCE=${instance}" >> "$GITHUB_ENV"
+
+          set +e
+          wf deploy --non-interactive --timeout 45m \
+            -i "${instance}" \
+            -e "${WAYFINDER_ENVIRONMENT}" \
+            -f Wayfinder.yaml \
+            --env-var RELEASE="${RELEASE}" \
+            --out-file ./deploy.json \
+            "${args[@]}"
+          rc=$?
+          set -e
+
+          # Exit code 3 means an approval gate was not decided in time. Nothing
+          # was applied — this is not a failed deployment, and re-running the
+          # job once the plan is approved is the correct next step. Anything
+          # else is a real failure.
+          if [[ ${rc} -eq 3 ]]; then
+            echo "::error title=Awaiting approval::Deployment of ${RELEASE} is paused at a Wayfinder approval gate and the approval window elapsed. Nothing has been applied. Approve the plan with 'wf approve cloudresource', then re-run this job."
+            {
+              echo "### :hourglass: ${RELEASE} is awaiting approval"
+              echo ""
+              echo "No changes were applied. Review the plan in this job's log, approve it with"
+              echo "\`wf approve cloudresource <name> -w ${workspace} -e ${WAYFINDER_ENVIRONMENT}\`,"
+              echo "then re-run this job."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
+          exit ${rc}
+
+      - name: Summarise
+        env:
+          RELEASE: ${{ github.ref_name }}
+        run: |
+          {
+            echo "### Released ${RELEASE} to ${WAYFINDER_ENVIRONMENT}"
+            echo ""
+            echo "- Instance: \`${WF_INSTANCE}\`"
+            echo "- Release: \`${RELEASE}\`"
+            echo "- URL: https://$(jq -r '.componentOutputs.web.cloudfront_url.value // "(none published)"' ./deploy.json)"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,27 @@
+# Registers the Java Lambda web app template with Wayfinder.
+#
+# This repository is public, so Wayfinder reads the template anonymously — no
+# GitHub connection is needed to register it or to preview what it renders.
+# Creating a repository from it does need a connected GitHub organisation.
+#
+#   wf apply -f RepoTemplate-java-lambda-webapp.yaml
+#   wf get repotemplate java-lambda-webapp -o yaml     # check status.manifest synced
+#
+apiVersion: sourcecontrol/v3
+kind: RepoTemplate
+metadata:
+  name: java-lambda-webapp
+  # Free-form axes for filtering the catalogue. Classification is spec.category.
+  labels:
+    language: java
+    framework: aws-lambda
+    family: wayfinder-golden-path
+spec:
+  url: https://github.com/appvia/wayfinder-examples.git
+  path: repo-templates/java-lambda-webapp
+  # Tracking a branch means every merge to it changes the template for the next
+  # team onboarded. `main` is the right place for that while the golden path is
+  # still moving; pin a tag once it has settled.
+  ref: main
+  displayName: Java Lambda web app
+  category: service

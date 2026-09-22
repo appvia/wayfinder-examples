@@ -1,0 +1,166 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-api-gateway-lambda
+  version: "1.0.3"
+spec:
+  cloud: aws
+  description: "HTTP API Gateway v2 with Lambda proxy integration. No public custom domain — designed to be fronted by CloudFront (or any other CDN), which reaches it over the default *.execute-api.<region>.amazonaws.com URL."
+  terraform:
+    modules:
+      - name: apigateway
+        source: "https://github.com/terraform-aws-modules/terraform-aws-apigateway-v2"
+        version: "v5.3.0"
+    files:
+      - name: main.tf
+        template: |
+          module "apigateway" {
+            source = ${{ .Modules.apigateway.Source | quote }}
+
+            name = ${{ .Inputs.api_name | quote }}
+            description = "HTTP API Gateway for ${{ .Stack.Name }} application"
+
+            # Protocol version - HTTP API (v2) is simpler and cheaper than REST API (v1)
+            protocol_type = "HTTP"
+
+            # CORS configuration - open for testing
+            cors_configuration = {
+              allow_headers = ["content-type", "x-amz-date", "authorization", "x-api-key", "x-amz-security-token", "x-amz-user-agent"]
+              allow_methods = ["*"]
+              allow_origins = ["*"]
+            }
+
+            # Deployment stage configuration
+            stage_name        = ${{ .Inputs.stage_name | quote }}
+
+            # No custom domain — fronted by a CDN (e.g. CloudFront) that reaches
+            # this APIGW over its default *.execute-api.<region>.amazonaws.com URL.
+            # create_domain_name=false disables the upstream module's domain block
+            # entirely, including the Route53 zone data-source lookup (which would
+            # otherwise fail with a coalesce error when no hosted_zone_name is set).
+            create_domain_name = false
+
+            # Standard tags
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+
+            routes = var.routes
+          }
+          variable "routes" {
+            description = "Map of API gateway routes with integrations"
+            type = map(object({
+              # Route
+              authorizer_key             = optional(string)
+              api_key_required           = optional(bool)
+              authorization_scopes       = optional(list(string), [])
+              authorization_type         = optional(string)
+              authorizer_id              = optional(string)
+              model_selection_expression = optional(string)
+              operation_name             = optional(string)
+              request_models             = optional(map(string), {})
+              request_parameter = optional(object({
+                request_parameter_key = optional(string)
+                required              = optional(bool, false)
+              }), {})
+              route_response_selection_expression = optional(string)
+
+              # Route settings
+              data_trace_enabled       = optional(bool)
+              detailed_metrics_enabled = optional(bool)
+              logging_level            = optional(string)
+              throttling_burst_limit   = optional(number)
+              throttling_rate_limit    = optional(number)
+
+              # Stage - Route response
+              route_response = optional(object({
+                create                     = optional(bool, false)
+                model_selection_expression = optional(string)
+                response_models            = optional(map(string))
+                route_response_key         = optional(string, "$default")
+              }), {})
+
+              # Integration
+              integration = object({
+                connection_id             = optional(string)
+                vpc_link_key              = optional(string)
+                connection_type           = optional(string)
+                content_handling_strategy = optional(string)
+                credentials_arn           = optional(string)
+                description               = optional(string)
+                method                    = optional(string)
+                subtype                   = optional(string)
+                type                      = optional(string, "AWS_PROXY")
+                uri                       = optional(string)
+                passthrough_behavior      = optional(string)
+                payload_format_version    = optional(string)
+                request_parameters        = optional(map(string), {})
+                request_templates         = optional(map(string), {})
+                response_parameters = optional(list(object({
+                  mappings    = map(string)
+                  status_code = string
+                })))
+                template_selection_expression = optional(string)
+                timeout_milliseconds          = optional(number)
+                tls_config = optional(object({
+                  server_name_to_verify = optional(string)
+                }))
+
+                # Integration Response
+                response = optional(object({
+                  content_handling_strategy     = optional(string)
+                  integration_response_key      = optional(string)
+                  response_templates            = optional(map(string))
+                  template_selection_expression = optional(string)
+                }), {})
+              })
+            }))
+            default = {}
+          }
+      - name: permissions.tf
+        template: |
+          ${{- range .Inputs.lambda_function_names }}
+          resource "aws_lambda_permission" "api_gateway_lambda_${{ . | replace "-" "_" | lower }}" {
+            statement_id  = "AllowAPIGatewayInvoke"
+            action        = "lambda:InvokeFunction"
+            function_name = "${{ . }}"
+            principal     = "apigateway.amazonaws.com"
+            source_arn    = "${module.apigateway.api_execution_arn}/*/*"
+          }
+
+          ${{- end }}
+      - name: outputs.tf
+        template: |
+          output "api_endpoint" {
+            value = module.apigateway.api_endpoint
+          }
+          output "api_gateway_arn" {
+            value = module.apigateway.api_arn
+          }
+          output "api_gateway_id" {
+            value = module.apigateway.api_id
+          }
+  # Input parameters for customization
+  inputs:
+    - name: lambda_function_names
+      description: "Name of the Lambda functions to use with this API Gateway"
+      type: list(string)
+      pattern: "^[a-zA-Z0-9-_]+$"
+    - name: api_name
+      description: "Name of the API Gateway"
+      type: string
+      pattern: "^[a-zA-Z0-9-_]+$"
+      minLength: 1
+      maxLength: 128
+    - name: stage_name
+      description: "Name of the deployment stage. Use \"$default\" for the
+        APIGW default stage (no stage path prefix on the invoke URL — useful
+        when fronting with CloudFront which forwards paths verbatim)."
+      type: string
+      optional: true
+      defaultValue: "$default"
+      pattern: '^(\$default|[a-zA-Z0-9-_]+)$'
+      minLength: 1
+      maxLength: 128
