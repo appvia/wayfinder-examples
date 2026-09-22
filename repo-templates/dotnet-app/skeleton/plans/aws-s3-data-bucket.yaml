@@ -103,7 +103,15 @@ spec:
           module "s3_bucket" {
             source = ${{ .Modules.s3_bucket.Source | quote }}
 
-            bucket_prefix = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}-"
+            # Instance name and suffix only, deliberately not the stack name as
+            # well. AWS caps bucket_prefix at 37 characters, and an instance name
+            # already begins with the stack name, so naming both overflows for any
+            # app whose name is not short: an "accounts-payable" stack with a
+            # "data" suffix rendered
+            # "accounts-payable-accounts-payable-develop-data-" (47) and terraform
+            # plan refused it. Uniqueness is unaffected - the module appends its own
+            # 26-character random suffix.
+            bucket_prefix = "${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}-"
 
             ${{- if .Inputs.versioning }}
             versioning = {

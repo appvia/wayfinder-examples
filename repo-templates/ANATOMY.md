@@ -96,6 +96,28 @@ Inside `skeleton/`, both file *contents* and file *paths* are rendered — which
 why you will see directories like `cmd/${{ .Inputs.serviceName }}/` on disk. A
 path that renders to nothing is how a file is conditionally left out.
 
+## What a template can render
+
+| Expression | What it is |
+| --- | --- |
+| `${{ .Inputs.<name> }}` | A value the person scaffolding gave, or the input's default. |
+| `${{ .Tenant }}` | The tenant. |
+| `${{ .Workspace }}` | The workspace the repository is created in — `wf create stack --workspace`. Empty for a tenant-scoped preview. |
+| `${{ .Repo.Name }}`, `.Repo.Organization`, `.Repo.URL`, `.Repo.DefaultBranch`, `.Repo.ID`, `.Repo.OrganizationID` | The repository being written. The two ids are what a GitHub Actions token's subject names it by. |
+| `${{ .Stack.Name }}` | The stack being created, when one is. |
+| `${{ .Wayfinder.Server }}` | This Wayfinder's public API URL. |
+| `${{ .ServiceAccounts.<handle>.* }}` | A service account the template declared. Available to repository variables, not to the skeleton — the accounts are named after the skeleton renders. |
+
+Nothing else is in scope. There is no access to the variable and secret
+hierarchy, and none to cluster or cloud context: a template's output is
+committed to a repository, so anything readable here is readable by anyone who
+can see that repository.
+
+Do not add an input for something the context already supplies. An input for the
+workspace can be given a value that is not the workspace the repository lives
+in, and a repository whose CI names the wrong workspace fails on its first run
+with a permission denial that reads like a broken service account.
+
 The exception is `skeleton.raw`: those files are copied byte for byte. That
 matters for anything with its own `${{ }}` syntax — GitHub Actions workflows,
 Helm charts, CloudResourcePlans — which Wayfinder would otherwise try to

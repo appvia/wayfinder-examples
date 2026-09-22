@@ -1,0 +1,55 @@
+# Destroys the preview environment when a pull request closes.
+#
+# Runs whether the pull request was merged or abandoned — `closed` covers both.
+# A destroy runs no LocalActions, so nothing is built here.
+#
+# This file is copied into your repository verbatim — Wayfinder does not
+# template it. The job declares `environment: preview`, so it signs in as the
+# same preview service account that deployed the instance and destroys it with
+# the rights that account has.
+name: Tear down preview
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  teardown:
+    name: Destroy preview instance
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_SERVICE_ACCOUNT }}
+      WAYFINDER_ENVIRONMENT: ${{ vars.WAYFINDER_ENVIRONMENT }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the Wayfinder CLI
+        run: bash .wayfinder/install-wf.sh
+
+      # Tolerates an instance that was never created: a pull request can be
+      # closed before any preview deployed, and a failed teardown must not turn
+      # a merged pull request red.
+      - name: Destroy the preview instance
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          source .wayfinder/ci.env
+
+          instance="${WF_SERVICE_NAME}-pr${PR_NUMBER}"
+          # Deleting a CloudFront distribution is as slow as creating one, and
+          # creating one measured 25m55s.
+          wf down --non-interactive --timeout 45m \
+            -i "${instance}" \
+            -e "${WAYFINDER_ENVIRONMENT}" \
+            || echo "::warning::Teardown of ${instance} did not complete. Check for leftover resources with 'wf get stackinstance ${instance} -e ${WAYFINDER_ENVIRONMENT}'."

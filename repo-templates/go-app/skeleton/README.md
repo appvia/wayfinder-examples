@@ -75,7 +75,7 @@ splits in two:
   | --- | --- |
   | `WF_SERVER` | Wayfinder API URL. |
   | `WF_TOOLBOX_IMAGE` | Image providing the `wf` CLI. Defaults to `quay.io/appvia-wayfinder/wftoolbox:latest`. |
-  | `WF_WORKSPACE` | Workspace to deploy into, when `.wayfinder/ci.env` leaves it blank. |
+  | `WF_WORKSPACE` | Workspace to deploy into, for a repository that was written by hand rather than scaffolded. |
   | `WF_HOST_CLUSTER` | Cluster to deploy the workload to. |
   | `WF_IDENTITY` | Cloud identity Wayfinder provisions cloud resources through. |
   | `WF_REGION` | Cloud region. |

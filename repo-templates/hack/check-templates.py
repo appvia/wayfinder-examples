@@ -44,7 +44,6 @@ SHARED_INPUTS = [
     "serviceName",
     "description",
     "owner",
-    "workspace",
     "developEnvironment",
     "prodEnvironment",
     "previewEnvironment",
@@ -74,7 +73,7 @@ def has_foreign_expressions(rel: str) -> bool:
 
 # The whole render context. Anything else inside a bare ${{ }} belongs to
 # something other than the scaffolder.
-SCAFFOLD_ROOTS = (".Inputs", ".Repo", ".Stack", ".Tenant")
+SCAFFOLD_ROOTS = (".Inputs", ".Repo", ".Stack", ".Tenant", ".Workspace", ".Wayfinder", ".ServiceAccounts")
 
 # Control structures and pipeline helpers, which carry no context of their own.
 SCAFFOLD_KEYWORDS = ("if", "end", "else", "range", "with", "define", "template", "block")

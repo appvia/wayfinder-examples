@@ -1,0 +1,104 @@
+# Wayfinder repo template definition.
+#
+# Parsed strictly: an unrecognised key here is an error, not a warning.
+# Everything under skeleton/ is what gets written into the new repository.
+name: Wayfinder team configuration
+description: >-
+  A team's Wayfinder platform configuration as code. Holds the team's
+  environments, per-environment deployer groups and role bindings, plus the
+  environment-to-account map its CI reads to decide when a cloud account needs
+  vending. Applied with `wf apply --prune`, so the repository is the source of
+  truth for everything it declares.
+
+# No Wayfinder.yaml and nothing to deploy: its CI applies manifests with
+# `wf apply`. A stack created alongside it would be empty and stay that way.
+forStack: false
+
+inputs:
+  - name: team
+    description: >-
+      Team name, e.g. "payments". Used in the group names and as the prefix of
+      each vended account's name.
+    type: string
+    minLength: 2
+    maxLength: 40
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  - name: serviceAccount
+    description: >-
+      Name of the CI service account this repository authenticates as, created
+      by the onboarding workflow. Not fully qualified here — CI builds
+      tenant:workspace:name itself.
+    type: string
+    minLength: 2
+    maxLength: 60
+    pattern: "^[a-z][a-z0-9-]*[a-z0-9]$"
+
+  # Seeds the one role binding the repository starts with. Everyone else is added by
+  # pull request, so this only has to be the person who takes delivery of the repo.
+  - name: teamLead
+    description: >-
+      Email address of the team lead, bound as a deployer in the first environment.
+      They must have accepted their invite to the tenant before the repository's CI
+      first runs — a binding cannot name a user who does not exist yet.
+    type: string
+    minLength: 3
+    maxLength: 200
+
+  - name: firstEnvironment
+    description: Name of the one environment the repository starts with.
+    type: string
+    optional: true
+    defaultValue: "dev"
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: region
+    description: Cloud region the first environment's account is vended in.
+    type: string
+    optional: true
+    defaultValue: "eu-west-2"
+
+  # Set by the onboarding workflow, which vends the account before it scaffolds this
+  # repository. Blank when the repository is created first, in which case the
+  # identities manifest for the first environment is written empty and the team adds
+  # it once the account exists.
+  - name: accountId
+    description: >-
+      Twelve-digit AWS account id vended for the first environment, if it exists yet.
+    type: string
+    optional: true
+    defaultValue: ""
+    pattern: "^([0-9]{12})?$"
+
+  - name: wayfinderServer
+    description: >-
+      Wayfinder API URL this repository's CI talks to. Leave blank for the
+      default SaaS API, or to take it from the WAYFINDER_SERVER GitHub variable
+      instead, which wins when both are set.
+    type: string
+    optional: true
+    defaultValue: ""
+    maxLength: 200
+
+skeleton:
+  path: skeleton
+
+  # Files listed here are copied byte for byte. Their contents are NOT rendered,
+  # so they must not use the `$${{ }}` escape either — it would land literally.
+  #
+  # Note that these globs are matched with path.Match: `**` is not supported, and
+  # `*.yaml` does not match `*.yml`, which is why both are listed.
+  raw:
+    # GitHub Actions has its own ${{ }} expression syntax, and these workflows
+    # are also full of ordinary shell ${VAR}. Keeping them raw means they are
+    # valid Actions YAML exactly as written, here and in the generated
+    # repository. Per-repository values reach them through .wayfinder/ci.env,
+    # which is rendered.
+    - ".github/workflows/*.yaml"
+    - ".github/workflows/*.yml"
+
+    # A CloudResourcePlan is Wayfinder's own template language from end to end, and
+    # every expression in it is meant to be evaluated when the plan is deployed.
+    # Rendering it here would consume them all, leaving the scaffolded repository with a
+    # plan whose tenant, workspace and environment were fixed the day it was created.
+    - "access/plans/*.yaml"

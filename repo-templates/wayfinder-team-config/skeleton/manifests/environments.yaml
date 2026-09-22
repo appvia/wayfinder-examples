@@ -1,0 +1,14 @@
+# The team's environments. Created by this repository's CI, never by hand — an
+# object that only ever existed through `wf apply --owner` has no adoption
+# question, which is why onboarding deliberately creates as little as it can.
+#
+# Keep this in step with ../environments.yaml. The map decides what gets VENDED;
+# these manifests decide what EXISTS in Wayfinder. An environment here with no
+# entry in the map has nowhere to deploy to.
+apiVersion: org/v3
+kind: Environment
+metadata:
+  name: ${{ .Inputs.firstEnvironment }}
+  workspace: ${{ .Workspace }}
+spec:
+  description: ${{ .Inputs.firstEnvironment }} environment for ${{ .Inputs.team }}

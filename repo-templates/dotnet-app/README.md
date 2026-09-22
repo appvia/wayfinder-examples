@@ -54,13 +54,12 @@ payments/
 the image name, the Helm release and the stack instance names.
 
 Everything else is optional and defaulted, so `--input serviceName=payments
---no-input` is enough to scaffold from CI. The two worth setting deliberately:
+--no-input` is enough to scaffold from CI. The one worth setting deliberately
+is `gatewayName`: name an existing Gateway API Gateway to publish the service,
+and left blank the service deploys but is reachable in-cluster only.
 
-- `gatewayName` — name an existing Gateway API Gateway to publish the service.
-  Left blank, the service deploys but is reachable in-cluster only.
-- `workspace` — leave blank to take the workspace from the `WF_WORKSPACE`
-  GitHub variable instead, which is better when one workspace serves many
-  repositories.
+The workspace is not an input. CI deploys into the workspace the repository was
+created in, which `wf create stack --workspace` names.
 
 Run `wf get repotemplate dotnet-app -o yaml` to see the full list with defaults.
 
