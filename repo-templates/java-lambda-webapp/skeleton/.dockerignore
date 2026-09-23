@@ -1,0 +1,5 @@
+target/
+web/
+.git/
+.github/
+plans/

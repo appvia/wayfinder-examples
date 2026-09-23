@@ -1,0 +1,250 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-lambda-java-handler
+  version: "1.0.0"
+spec:
+  cloud: aws
+  description: "Multi-instance Java Lambda handler, deployed as a container image. Suffix combined with stack+instance yields unique function names. Optional SNS subscriptions and per-handler env vars supported."
+  workloadIdentity:
+    identityType: AWSRole
+    optional: false
+    basePermissions:
+      aws:
+        customIAMPolicyTemplate: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AppLogGroup",
+                "Effect": "Allow",
+                "Action": [
+                  "logs:CreateLogGroup"
+                ],
+                "Resource": "arn:aws:logs:${{ .Cloud.Region }}:${{ .Cloud.AWS.Account }}:*"
+              },
+              {
+                "Sid": "AppLog",
+                "Effect": "Allow",
+                "Action": [
+                  "logs:CreateLogStream",
+                  "logs:PutLogEvents"
+                ],
+                "Resource": "arn:aws:logs:${{ .Cloud.Region }}:${{ .Cloud.AWS.Account }}:log-group:/aws/lambda/${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}:*"
+              }
+            ]
+          }
+    restrictAccessTo:
+      trustedService: "lambda.amazonaws.com"
+      # Normally the trust policy is scoped to this function's ARN (an aws:SourceArn
+      # condition). That works for push invokes (API Gateway, SNS) but BREAKS poller-based
+      # event source mappings (DynamoDB Streams, SQS, Kinesis): the Lambda service's poller
+      # assumes the execution role without aws:SourceArn in context, so the condition fails
+      # and the function is never invoked. Set unrestricted_trust=true on such consumers to
+      # render this empty — Wayfinder then omits the condition, leaving the standard
+      # service-only trust the poller can assume. Push-invoked functions keep the scoping.
+      resourceIDTemplate: "${{ if .Inputs.unrestricted_trust }}${{ else }}${{ .Outputs.lambda_function_arn }}${{ end }}"
+  consumptionPolicies:
+    - name: execute
+      grantPermissions:
+        aws:
+          customIAMPolicyTemplate: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "AppExecute",
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": "${{ .Outputs.lambda_function_arn }}"
+                }
+              ]
+            }
+  terraform:
+    modules:
+      - name: lambda
+        source: "https://github.com/terraform-aws-modules/terraform-aws-lambda"
+        version: "v7.2.1"
+    files:
+      - name: main.tf
+        template: |
+          variable "env" {
+            type    = map(string)
+            default = {}
+          }
+
+          module "lambda" {
+            source = ${{ .Modules.lambda.Source | quote }}
+
+            function_name = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}"
+            description   = "Java Lambda handler (${{ .Inputs.suffix }}) managed by Wayfinder"
+
+            # Container image configuration
+            create_package = false
+            package_type   = "Image"
+            # Either a full image URI, or a repository name and tag in this account's own
+            # ECR registry, whose address follows from the account and region the plan is
+            # deploying into. The second form is what lets a stack name its image without
+            # knowing its account id.
+            image_uri      = ${{ if .Inputs.container_image_uri }}${{ .Inputs.container_image_uri | quote }}${{ else }}"${{ .Cloud.AWS.Account }}.dkr.ecr.${{ .Cloud.Region }}.amazonaws.com/${{ .Inputs.image_repository }}:${{ .Inputs.image_tag }}"${{ end }}
+
+            # Runtime configuration
+            timeout     = ${{ .Inputs.timeout | default 30 }}
+            memory_size = ${{ .Inputs.memory_size | default 1024 }}
+
+            # Environment variables — defaults merged with per-handler vars from the manifest
+            environment_variables = merge(var.env, {
+              APP_NAME = "${{ .Stack.Name }}"
+              APP_ENV  = "${{ .Stack.Instance.Name }}"
+            })
+
+            # Execution role — provided by workload identity; do not create one
+            create_role = false
+            lambda_role = "${{ .WorkloadIdentity.AWS.RoleARN }}"
+
+            # CloudWatch Logs
+            cloudwatch_logs_retention_in_days = 7
+
+            # VPC configuration (optional)
+            vpc_subnet_ids         = ${{ if .Inputs.vpc_subnet_ids }}${{ .Inputs.vpc_subnet_ids | toJson }}${{ else }}[]${{ end }}
+            vpc_security_group_ids = ${{ if .Inputs.vpc_security_group_ids }}${{ .Inputs.vpc_security_group_ids | toJson }}${{ else }}[]${{ end }}
+
+            # Reserved concurrency (-1 = unreserved)
+            reserved_concurrent_executions = ${{ .Inputs.reserved_concurrency | default -1 }}
+
+            # Container lambdas: use unqualified alias triggers, not current-version triggers
+            create_current_version_allowed_triggers   = false
+            create_unqualified_alias_allowed_triggers = true
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+      - name: subscriptions.tf
+        template: |
+          # Subscription ARNs are inlined from the manifest input at render time.
+          # Wayfinder does not auto-wire an input to a like-named terraform variable —
+          # the value must be consumed via .Inputs (cf. vpc_subnet_ids in main.tf).
+          locals {
+            sns_subscription_arns = toset(${{ if .Inputs.sns_subscription_arns }}${{ .Inputs.sns_subscription_arns | toJson }}${{ else }}[]${{ end }})
+          }
+
+          # One SNS topic subscription per ARN. toset() is idempotent and dedupes.
+          resource "aws_sns_topic_subscription" "this" {
+            for_each = local.sns_subscription_arns
+
+            topic_arn = each.value
+            protocol  = "lambda"
+            endpoint  = module.lambda.lambda_function_arn
+          }
+
+          # Lambda resource-based policy allowing each SNS topic to invoke the function.
+          resource "aws_lambda_permission" "sns" {
+            for_each = local.sns_subscription_arns
+
+            statement_id  = "AllowSNSInvoke-${replace(each.value, ":", "-")}"
+            action        = "lambda:InvokeFunction"
+            function_name = module.lambda.lambda_function_name
+            principal     = "sns.amazonaws.com"
+            source_arn    = each.value
+          }
+      - name: streams.tf
+        template: |
+          # DynamoDB Stream ARNs are inlined from the manifest input at render time
+          # (same idiom as sns_subscription_arns — Wayfinder does not auto-wire inputs
+          # to like-named terraform variables). Each ARN gets an event-source mapping
+          # so the Lambda is invoked on table changes. Stream-read IAM is granted via
+          # the table's `stream` consumption policy on this Lambda's workload identity.
+          locals {
+            dynamodb_stream_arns = toset(${{ if .Inputs.dynamodb_stream_arns }}${{ .Inputs.dynamodb_stream_arns | toJson }}${{ else }}[]${{ end }})
+          }
+
+          resource "aws_lambda_event_source_mapping" "ddb" {
+            for_each = local.dynamodb_stream_arns
+
+            event_source_arn  = each.value
+            function_name     = module.lambda.lambda_function_arn
+            starting_position = "LATEST"
+            batch_size        = 10
+            enabled           = true
+          }
+      - name: outputs.tf
+        template: |
+          output "lambda_function_invoke_arn" {
+            value = module.lambda.lambda_function_invoke_arn
+          }
+          output "lambda_function_name" {
+            value = module.lambda.lambda_function_name
+          }
+          output "lambda_function_arn" {
+            value = module.lambda.lambda_function_arn
+          }
+  inputs:
+    - name: suffix
+      description: "Disambiguates multiple handlers in one stack. Final function name: ${stack}-${instance}-${suffix} (e.g. orderly-dev1-checkout). Pattern: ^[a-zA-Z0-9-_]+$"
+      type: string
+      optional: false
+    - name: container_image_uri
+      description: "Full URI of the container image to deploy. Leave empty to name the image by image_repository and image_tag in this account's ECR registry instead."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: image_repository
+      description: "ECR repository name in the deploying account, used with image_tag when container_image_uri is empty."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: image_tag
+      description: "Image tag in image_repository, used when container_image_uri is empty."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: sns_subscription_arns
+      description: "SNS topic ARNs this Lambda should subscribe to. For each ARN an aws_sns_topic_subscription and aws_lambda_permission are created. Defaults to no subscriptions."
+      type: list(string)
+      optional: true
+      defaultValue: []
+    - name: dynamodb_stream_arns
+      description: "DynamoDB Stream ARNs this Lambda should consume. For each ARN an aws_lambda_event_source_mapping (starting_position LATEST) is created. Grant stream-read IAM via the table's `stream` consumption policy. Defaults to no streams."
+      type: list(string)
+      optional: true
+      defaultValue: []
+    - name: unrestricted_trust
+      description: "Set to any non-empty value (e.g. \"true\") to drop the aws:SourceArn condition from the execution role's trust policy, leaving a plain lambda.amazonaws.com service trust. REQUIRED for Lambdas triggered by poller-based event source mappings (DynamoDB Streams, SQS, Kinesis), whose poller cannot satisfy a SourceArn condition. Leave unset for push-invoked Lambdas (API Gateway, SNS) to keep the tighter scoping."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: env
+      description: "Per-handler environment variables merged on top of the defaults (APP_NAME, APP_ENV). Use to pass handler-specific config without baking it into the image."
+      type: map(string)
+      optional: true
+      defaultValue: {}
+    - name: vpc_subnet_ids
+      description: "VPC subnet IDs for Lambda VPC attachment (optional)."
+      type: list(string)
+      optional: true
+      defaultValue: []
+    - name: vpc_security_group_ids
+      description: "VPC security group IDs for Lambda VPC attachment (optional)."
+      type: list(string)
+      optional: true
+      defaultValue: []
+    - name: reserved_concurrency
+      description: "Reserved concurrency limit. -1 means unreserved (default)."
+      type: number
+      optional: true
+      defaultValue: -1
+    - name: timeout
+      description: "Lambda execution timeout in seconds."
+      type: number
+      optional: true
+      defaultValue: 30
+    - name: memory_size
+      description: "Lambda memory allocation in MB. Lambda allocates CPU in proportion to memory, and a JVM's cold start is CPU-bound, so less than 1024 makes the first request after a deploy noticeably slow."
+      type: number
+      optional: true
+      defaultValue: 1024
