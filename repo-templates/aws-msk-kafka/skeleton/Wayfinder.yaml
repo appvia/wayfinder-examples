@@ -1,0 +1,61 @@
+# One MSK Serverless Kafka cluster in the platform VPC of the environment this
+# is deployed to, tagged so application stacks find it without being told its
+# ARN or brokers.
+#
+#   $${{ ... }}  A Wayfinder expression — a component's output, or a fact about
+#               the deployment. Resolved in dependency order as the deploy runs.
+#
+# Deploy it yourself with:
+#   wf deploy -f Wayfinder.yaml -i ${{ .Stack.Name }}-dev -w <workspace> -e <environment> \
+#     --identity <workspace>/<environment>/aws-<environment> --region <region>
+#
+# Deploy it once per environment. A second instance in the same environment
+# fails on its security group name rather than creating a second cluster with
+# the same tags.
+apiVersion: v1
+name: ${{ .Stack.Name }}
+description: "${{ .Inputs.description }}"
+
+components:
+
+  # Finds the VPC tagged Environment=<environment> and its Tier=private subnets.
+  # Creates nothing, and fails the deploy unless exactly one such VPC exists in
+  # the account and region.
+  network:
+    type: CloudResource
+    plan: file:plans/aws-vpc-discovery.yaml
+
+  # The cluster. Named ${{ .Inputs.kafkaCluster }}-<environment> and tagged
+  # Environment=<environment>, KafkaCluster=${{ .Inputs.kafkaCluster }} and
+  # ManagedBy=Wayfinder. Anything in the VPC can open port 9098; only a
+  # workload identity granted produce-consume can sign in.
+  kafka:
+    type: CloudResource
+    plan: file:plans/aws-msk-serverless.yaml
+    inputs:
+      - name: vpc_id
+        value: "$${{ .Components.network.vpc_id }}"
+      - name: vpc_cidr
+        value: "$${{ .Components.network.vpc_cidr }}"
+      - name: subnet_ids
+        value: "$${{ .Components.network.private_subnet_ids | toTFVars }}"
+      - name: cluster
+        value: ${{ .Inputs.kafkaCluster }}
+
+  # Fails the deploy if the cluster came up with no IAM bootstrap brokers, and
+  # prints what an application needs to find it. No `withAccess`: it reads
+  # component outputs only, so it is given no cloud credentials.
+  smoke:
+    type: LocalAction
+    localAction:
+      run: |-
+        brokers="$${{ .Components.kafka.bootstrap_brokers }}"
+        if [ -z "$brokers" ]; then
+          echo "smoke: cluster $${{ .Components.kafka.cluster_name }} published no IAM bootstrap brokers" >&2
+          exit 1
+        fi
+        echo "smoke: cluster $${{ .Components.kafka.cluster_name }} is up"
+        echo "bootstrap_brokers=$brokers"
+        echo "An application finds this cluster with the aws-msk-discovery plan, by these tags:"
+        echo "  Environment=$${{ .Environment }}"
+        echo "  KafkaCluster=${{ .Inputs.kafkaCluster }}"

@@ -34,15 +34,18 @@ groundwork than one that does not.
 
 ## Platform configuration
 
-Not a service. This one scaffolds the repository a **platform team** hands to an
-application team, so that team can change its own environments and decide who may
-deploy into them, by pull request, without being able to grant itself cloud access.
+Not services. `wayfinder-team-config` scaffolds the repository a **platform team**
+hands to an application team, so that team can change its own environments and
+decide who may deploy into them, by pull request, without being able to grant
+itself cloud access. `aws-msk-kafka` scaffolds infrastructure that every
+application in an environment shares.
 
 | Template | What it creates | What it shows |
 | -------- | --------------- | ------------- |
 | [`wayfinder-team-config/`](./wayfinder-team-config) | A team's platform configuration repository, with CI that plans on a pull request and applies with `--prune` on merge | Wayfinder objects as code, and CI that **invokes a workflow** — it reads an environment-to-account map and asks the platform to vend any cloud account that is missing |
+| [`aws-msk-kafka/`](./aws-msk-kafka) | One MSK Serverless Kafka cluster per environment in the platform VPC, deployed on merge and on a tag | Shared infrastructure found **by tag**: application stacks look it up with `aws-msk-discovery` and sign in with IAM, so none is given its ARN or a password. A pull request only dry-runs, because a preview cluster would carry the same tags |
 
-It is the second half of an onboarding flow: something has to create the workspace,
+`wayfinder-team-config` is the second half of an onboarding flow: something has to create the workspace,
 the CI service account and its federated credential first. The `onboard-aws`
 example in the Wayfinder repository is that first half.
 
@@ -85,7 +88,7 @@ $ wf create stack payments --from-template go-app --input serviceName=payments \
     --github-org github.acme --workspace team-a
 ```
 
-`serviceName` is the only required input on every template here. Run
+`serviceName` is the only required input on every service template here; `aws-msk-kafka` has none. Run
 `wf get repotemplate <name> -o yaml` to see the rest with their defaults.
 
 ## How a template is laid out
