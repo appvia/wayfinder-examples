@@ -39,6 +39,7 @@ spec:
               "Version": "2012-10-17",
               "Statement": [
                 {
+                  "Sid": "ConnectToTheCluster",
                   "Effect": "Allow",
                   "Action": [
                     "kafka-cluster:Connect",
@@ -47,6 +48,7 @@ spec:
                   "Resource": "${{ .Outputs.cluster_arn }}"
                 },
                 {
+                  "Sid": "UseTopics",
                   "Effect": "Allow",
                   "Action": [
                     "kafka-cluster:CreateTopic",
@@ -58,6 +60,7 @@ spec:
                   "Resource": "${{ .Outputs.cluster_arn | replace ":cluster/" ":topic/" }}/*"
                 },
                 {
+                  "Sid": "UseConsumerGroups",
                   "Effect": "Allow",
                   "Action": [
                     "kafka-cluster:AlterGroup",
