@@ -1,0 +1,210 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-cloudfront-alb
+  version: "1.0.0"
+spec:
+  cloud: aws
+  resourceType: dependency
+  category: networking
+  description: "CloudFront distribution in front of an ALB, so the services behind it answer on HTTPS. Nothing is cached: every request goes to the ALB over HTTP. Serves on CloudFront's own *.cloudfront.net domain, or on a custom hostname backed by an ACM cert in us-east-1 (Wayfinder-managed aliased provider) when a Route53 zone is named."
+  inputs:
+    - name: alb_dns_name
+      description: "DNS name of the ALB to send every request to, e.g. my-app-dev-1a2b3c4d-123456789.eu-west-2.elb.amazonaws.com. CloudFront reaches it on port 80."
+      type: string
+      optional: false
+    - name: hosted_zone_name
+      description: "Route53 hosted zone (e.g. example.com) used for both the ACM cert DNS validation records and the public A-alias record pointing at the CloudFront distribution. Leave it empty and the site answers on CloudFront's own *.cloudfront.net domain instead, which needs no Route53 zone and no certificate."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: hostname
+      description: "Hostname within the hosted zone (e.g. pip-dev). The full FQDN — \"${hostname}.${hosted_zone_name}\" — is the CloudFront alias and ACM cert subject. Set it whenever hosted_zone_name is set; it is ignored when hosted_zone_name is empty."
+      type: string
+      optional: true
+      defaultValue: ""
+  outputs:
+    - name: distribution_id
+      description: "CloudFront distribution ID"
+      type: string
+    - name: cloudfront_url
+      description: "Public FQDN of the site, without a scheme: the custom domain (e.g. pip-dev.example.com) when hosted_zone_name is set, and CloudFront's own *.cloudfront.net domain when it is not."
+      type: string
+    - name: distribution_domain_name
+      description: "CloudFront's default *.cloudfront.net domain (useful for debugging or as an A-alias target)."
+      type: string
+  terraform:
+    # CloudFront requires its ACM cert in us-east-1 regardless of where the rest
+    # of the stack lives. The us_east_1 alias makes Wayfinder render an aliased
+    # `provider "aws"` block; cert.tf references it with `provider = aws.us_east_1`.
+    additionalRegionalProviders:
+      - alias: us_east_1
+        region: us-east-1
+    files:
+      - name: main.tf
+        template: |
+          locals {
+            ${{- if .Inputs.hosted_zone_name }}
+            fqdn = "${{ .Inputs.hostname }}.${{ .Inputs.hosted_zone_name }}"
+            ${{- end }}
+          }
+
+          # AWS-managed policies: no caching at all, and every viewer header, cookie
+          # and query string passed on except Host, so the ALB sees its own name.
+          # The services behind the ALB are an HTML form journey with a session
+          # cookie and a JSON API; caching either would serve one person's page to
+          # another.
+          data "aws_cloudfront_cache_policy" "disabled" {
+            name = "Managed-CachingDisabled"
+          }
+
+          data "aws_cloudfront_origin_request_policy" "all_viewer" {
+            name = "Managed-AllViewerExceptHostHeader"
+          }
+
+          resource "aws_cloudfront_distribution" "this" {
+            enabled         = true
+            is_ipv6_enabled = true
+            comment         = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}"
+            price_class     = "PriceClass_100"
+            ${{- if .Inputs.hosted_zone_name }}
+            aliases         = [local.fqdn]
+
+            # The cert must be fully validated before the distribution is created;
+            # the validation resource lives in cert.tf.
+            depends_on = [aws_acm_certificate_validation.this]
+            ${{- end }}
+
+            # The ALB listens on HTTP only. CloudFront terminates TLS for the viewer
+            # and the platform's ALB security group admits CloudFront and nothing else.
+            origin {
+              domain_name = "${{ .Inputs.alb_dns_name }}"
+              origin_id   = "alb"
+
+              custom_origin_config {
+                http_port              = 80
+                https_port             = 443
+                origin_protocol_policy = "http-only"
+                origin_ssl_protocols   = ["TLSv1.2"]
+              }
+            }
+
+            default_cache_behavior {
+              allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+              cached_methods           = ["GET", "HEAD"]
+              target_origin_id         = "alb"
+              viewer_protocol_policy   = "redirect-to-https"
+              compress                 = true
+              cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
+              origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+            }
+
+            ${{- if .Inputs.hosted_zone_name }}
+            viewer_certificate {
+              acm_certificate_arn      = aws_acm_certificate.this.arn
+              ssl_support_method       = "sni-only"
+              minimum_protocol_version = "TLSv1.2_2021"
+            }
+            ${{- else }}
+            # No Route53 zone was named, so the site answers on the distribution's own
+            # *.cloudfront.net domain, which CloudFront's certificate already covers.
+            viewer_certificate {
+              cloudfront_default_certificate = true
+            }
+            ${{- end }}
+
+            restrictions {
+              geo_restriction {
+                restriction_type = "none"
+              }
+            }
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          ${{- if .Inputs.hosted_zone_name }}
+          # Route53 is global, so this uses the default (stack-region) provider.
+          data "aws_route53_zone" "this" {
+            name         = "${{ .Inputs.hosted_zone_name }}"
+            private_zone = false
+          }
+
+          resource "aws_route53_record" "this" {
+            zone_id = data.aws_route53_zone.this.zone_id
+            name    = local.fqdn
+            type    = "A"
+
+            alias {
+              name                   = aws_cloudfront_distribution.this.domain_name
+              zone_id                = aws_cloudfront_distribution.this.hosted_zone_id
+              evaluate_target_health = false
+            }
+          }
+          ${{- end }}
+
+      - name: cert.tf
+        template: |
+          ${{- if .Inputs.hosted_zone_name }}
+          # CloudFront only accepts viewer certs from us-east-1, so this uses the
+          # aliased provider declared in spec.terraform.additionalRegionalProviders.
+          resource "aws_acm_certificate" "this" {
+            provider          = aws.us_east_1
+            domain_name       = "${{ .Inputs.hostname }}.${{ .Inputs.hosted_zone_name }}"
+            validation_method = "DNS"
+
+            lifecycle {
+              create_before_destroy = true
+            }
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          resource "aws_route53_record" "cert_validation" {
+            for_each = {
+              for dvo in aws_acm_certificate.this.domain_validation_options : dvo.domain_name => {
+                name   = dvo.resource_record_name
+                record = dvo.resource_record_value
+                type   = dvo.resource_record_type
+              }
+            }
+
+            zone_id         = data.aws_route53_zone.this.zone_id
+            name            = each.value.name
+            type            = each.value.type
+            ttl             = 60
+            records         = [each.value.record]
+            allow_overwrite = true
+          }
+
+          resource "aws_acm_certificate_validation" "this" {
+            provider                = aws.us_east_1
+            certificate_arn         = aws_acm_certificate.this.arn
+            validation_record_fqdns = [for r in aws_route53_record.cert_validation : r.fqdn]
+          }
+          ${{- end }}
+
+      - name: outputs.tf
+        template: |
+          output "distribution_id" {
+            value = aws_cloudfront_distribution.this.id
+          }
+
+          output "cloudfront_url" {
+            ${{- if .Inputs.hosted_zone_name }}
+            value = local.fqdn
+            ${{- else }}
+            value = aws_cloudfront_distribution.this.domain_name
+            ${{- end }}
+          }
+
+          output "distribution_domain_name" {
+            value = aws_cloudfront_distribution.this.domain_name
+          }

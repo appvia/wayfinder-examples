@@ -1,0 +1,21 @@
+description: A message is accepted and given a reference, and reads SUBMITTED until its record is consumed.
+name: submit message
+request:
+  method: POST
+  url: /api/messages
+  headers:
+    Content-Type: application/json
+  body:
+    message: Hello from the contract
+response:
+  status: 201
+  headers:
+    Content-Type: application/json
+  body:
+    reference: MSG-7K2M9QX4
+    status: SUBMITTED
+  matchers:
+    body:
+      - path: $.reference
+        type: by_regex
+        value: "MSG-[A-Z0-9]{8}"

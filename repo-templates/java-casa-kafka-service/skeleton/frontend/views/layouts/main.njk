@@ -1,0 +1,10 @@
+{#
+ # Pages outside the journey (the error page). Adds the demo phase banner to
+ # CASA's main layout.
+ #}
+{% extends "casa/layouts/main.njk" %}
+
+{% block serviceNavigation %}
+  {{ super() }}
+  {% include "partials/phase-banner.njk" %}
+{% endblock %}

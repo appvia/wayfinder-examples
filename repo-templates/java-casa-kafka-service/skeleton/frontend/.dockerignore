@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+test
+coverage
+.git
+.gitignore
+.dockerignore
+Dockerfile
+eslint.config.js
+README.md

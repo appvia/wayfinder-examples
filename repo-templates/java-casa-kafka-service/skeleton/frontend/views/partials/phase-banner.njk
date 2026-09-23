@@ -1,0 +1,7 @@
+{% from "govuk/components/phase-banner/macro.njk" import govukPhaseBanner %}
+<div class="govuk-width-container">
+  {{ govukPhaseBanner({
+    tag: { text: "Demo" },
+    html: 'This is a demonstration service built from a Wayfinder template. It is not a real government service.'
+  }) }}
+</div>

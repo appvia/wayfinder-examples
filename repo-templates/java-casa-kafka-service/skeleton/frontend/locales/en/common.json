@@ -1,0 +1,10 @@
+{
+  "serviceName": "Send a message",
+  "form": {
+    "buttons": {
+      "continue": {
+        "label": "Send"
+      }
+    }
+  }
+}

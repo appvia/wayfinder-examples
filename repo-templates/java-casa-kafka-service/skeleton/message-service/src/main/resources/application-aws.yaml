@@ -1,0 +1,24 @@
+# Amazon MSK with IAM sign-in. The Kafka client signs in as the ECS task role,
+# found through the default AWS credentials chain, so no keys are configured.
+spring:
+  cloud:
+    stream:
+      kafka:
+        binder:
+          # -1 creates the topic with the cluster's own default replication
+          # factor. MSK Serverless refuses any other value, and a provisioned
+          # cluster sets its default to match its broker count.
+          replication-factor: -1
+          configuration:
+            "[security.protocol]": SASL_SSL
+            "[sasl.mechanism]": AWS_MSK_IAM
+            "[sasl.jaas.config]": "software.amazon.msk.auth.iam.IAMLoginModule required;"
+            "[sasl.client.callback.handler.class]": software.amazon.msk.auth.iam.IAMClientCallbackHandler
+
+# Every instance of the stack in one environment shares the one MSK cluster. A
+# topic and a consumer group per instance, named from APP_NAME and APP_ENV (the
+# stack and the instance, which the ECS task is given), keep a preview from
+# consuming another instance's messages, which would leave its own at SUBMITTED.
+messages:
+  topic: ${APP_NAME}.${APP_ENV}.message-submitted
+  group: ${APP_NAME}.${APP_ENV}.message-service

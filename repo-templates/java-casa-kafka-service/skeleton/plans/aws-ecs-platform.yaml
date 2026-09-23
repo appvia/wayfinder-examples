@@ -1,0 +1,208 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-ecs-platform
+  version: "2.0.0"
+spec:
+  cloud: aws
+  resourceType: runtime
+  category: compute
+  description: "Shared platform for Fargate services in a VPC that already exists: an ECS cluster with Fargate capacity, an internet-facing ALB that only CloudFront can reach, whose HTTP listener answers 404 until a service claims a path, and a security group for tasks that admits traffic from the ALB and from other tasks."
+  inputs:
+    - name: vpc_id
+      description: "ID of the VPC to build in, e.g. the vpc_id output of aws-vpc-discovery."
+      type: string
+      optional: false
+    - name: public_subnet_ids
+      description: "Public subnets for the load balancer, in at least two availability zones, e.g. the public_subnet_ids output of aws-vpc-discovery."
+      type: list(string)
+      optional: false
+      minItems: 2
+  outputs:
+    - name: cluster_name
+      description: "Name of the ECS cluster."
+      type: string
+    - name: cluster_arn
+      description: "ARN of the ECS cluster."
+      type: string
+    - name: alb_listener_arn
+      description: "ARN of the ALB's HTTP:80 listener. Services add listener rules to it."
+      type: string
+    - name: alb_dns_name
+      description: "DNS name of the ALB, e.g. my-app-dev-1a2b3c4d-123456789.eu-west-2.elb.amazonaws.com. Only CloudFront can connect to it; use it as a CloudFront origin."
+      type: string
+    - name: alb_security_group_id
+      description: "ID of the ALB's security group."
+      type: string
+    - name: tasks_security_group_id
+      description: "ID of the security group for Fargate tasks. It admits all TCP from the ALB and from other members of the group."
+      type: string
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          locals {
+            name_prefix       = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}"
+            vpc_id            = "${{ .Inputs.vpc_id }}"
+            public_subnet_ids = ${{ .Inputs.public_subnet_ids | toJson }}
+
+            # ALB names are at most 32 characters of letters, digits and hyphens, and
+            # cannot end in a hyphen. A truncated prefix plus 8 characters of its hash
+            # keeps the name unique however long the stack and instance names are.
+            alb_name = "${replace(substr(local.name_prefix, 0, 23), "/-+$/", "")}-${substr(md5(local.name_prefix), 0, 8)}"
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          # ── ECS cluster ─────────────────────────────────────────────────────────────
+          resource "aws_ecs_cluster" "this" {
+            name = local.name_prefix
+
+            setting {
+              name  = "containerInsights"
+              value = "disabled"
+            }
+
+            tags = local.tags
+          }
+
+          resource "aws_ecs_cluster_capacity_providers" "this" {
+            cluster_name       = aws_ecs_cluster.this.name
+            capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+
+            default_capacity_provider_strategy {
+              capacity_provider = "FARGATE"
+              weight            = 1
+            }
+          }
+
+          # ── Security groups ─────────────────────────────────────────────────────────
+          resource "aws_security_group" "alb" {
+            name        = "${local.name_prefix}-alb"
+            description = "ALB for ${local.name_prefix}: HTTP from anywhere"
+            vpc_id      = local.vpc_id
+
+            tags = merge(local.tags, { Name = "${local.name_prefix}-alb" })
+          }
+
+          # Only CloudFront's origin-facing addresses reach the ALB, so nobody can
+          # skip HTTPS by calling the load balancer's own name. The group's
+          # description still says "from anywhere" because changing a description
+          # makes AWS replace the group, which an existing ALB cannot survive.
+          #
+          # The prefix list has around 55 entries and each counts against the
+          # group's rule quota (60 by default), so this is the only rule it holds.
+          data "aws_ec2_managed_prefix_list" "cloudfront" {
+            name = "com.amazonaws.global.cloudfront.origin-facing"
+          }
+
+          resource "aws_vpc_security_group_ingress_rule" "alb_http" {
+            security_group_id = aws_security_group.alb.id
+            description       = "HTTP from CloudFront"
+            ip_protocol       = "tcp"
+            from_port         = 80
+            to_port           = 80
+            prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront.id
+          }
+
+          resource "aws_vpc_security_group_egress_rule" "alb_all" {
+            security_group_id = aws_security_group.alb.id
+            description       = "All outbound"
+            ip_protocol       = "-1"
+            cidr_ipv4         = "0.0.0.0/0"
+          }
+
+          resource "aws_security_group" "tasks" {
+            name        = "${local.name_prefix}-tasks"
+            description = "Fargate tasks for ${local.name_prefix}: TCP from the ALB and from each other"
+            vpc_id      = local.vpc_id
+
+            tags = merge(local.tags, { Name = "${local.name_prefix}-tasks" })
+          }
+
+          resource "aws_vpc_security_group_ingress_rule" "tasks_from_alb" {
+            security_group_id            = aws_security_group.tasks.id
+            description                  = "All TCP from the ALB"
+            ip_protocol                  = "tcp"
+            from_port                    = 0
+            to_port                      = 65535
+            referenced_security_group_id = aws_security_group.alb.id
+          }
+
+          resource "aws_vpc_security_group_ingress_rule" "tasks_from_self" {
+            security_group_id            = aws_security_group.tasks.id
+            description                  = "All TCP from other tasks"
+            ip_protocol                  = "tcp"
+            from_port                    = 0
+            to_port                      = 65535
+            referenced_security_group_id = aws_security_group.tasks.id
+          }
+
+          resource "aws_vpc_security_group_egress_rule" "tasks_all" {
+            security_group_id = aws_security_group.tasks.id
+            description       = "All outbound"
+            ip_protocol       = "-1"
+            cidr_ipv4         = "0.0.0.0/0"
+          }
+
+          # ── Application load balancer ───────────────────────────────────────────────
+          resource "aws_lb" "this" {
+            name               = local.alb_name
+            internal           = false
+            load_balancer_type = "application"
+            security_groups    = [aws_security_group.alb.id]
+            subnets            = local.public_subnet_ids
+
+            drop_invalid_header_fields = true
+
+            tags = local.tags
+          }
+
+          # Answers 404 for any path no service has claimed with a listener rule.
+          resource "aws_lb_listener" "http" {
+            load_balancer_arn = aws_lb.this.arn
+            port              = 80
+            protocol          = "HTTP"
+
+            default_action {
+              type = "fixed-response"
+
+              fixed_response {
+                content_type = "text/plain"
+                message_body = "Not found"
+                status_code  = "404"
+              }
+            }
+
+            tags = local.tags
+          }
+      - name: outputs.tf
+        template: |
+          output "cluster_name" {
+            description = "Name of the ECS cluster."
+            value       = aws_ecs_cluster.this.name
+          }
+          output "cluster_arn" {
+            description = "ARN of the ECS cluster."
+            value       = aws_ecs_cluster.this.arn
+          }
+          output "alb_listener_arn" {
+            description = "ARN of the ALB's HTTP:80 listener."
+            value       = aws_lb_listener.http.arn
+          }
+          output "alb_dns_name" {
+            description = "Public DNS name of the ALB."
+            value       = aws_lb.this.dns_name
+          }
+          output "alb_security_group_id" {
+            description = "ID of the ALB's security group."
+            value       = aws_security_group.alb.id
+          }
+          output "tasks_security_group_id" {
+            description = "ID of the security group for Fargate tasks."
+            value       = aws_security_group.tasks.id
+          }

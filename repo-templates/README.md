@@ -27,6 +27,14 @@ Kubernetes plus an S3 bucket, wired together by workload identity — the pod
 reaches the bucket through its own cloud identity, and no credentials exist
 anywhere in the generated repository.
 
+### On AWS, without a cluster
+
+The same delivery pipeline, deploying to AWS services rather than Kubernetes.
+
+| Template | Language | What you get |
+| -------- | -------- | ------------ |
+| [`java-casa-kafka-service/`](./java-casa-kafka-service) | Java, Node | One GOV.UK CASA page and a Spring Boot 4 API on ECS Fargate, sending Avro records through the environment's Amazon MSK cluster. Finds its VPC and Kafka cluster by tag and builds neither |
+
 **[DELIVERY-PIPELINE.md](./DELIVERY-PIPELINE.md) is the setup guide** — what the
 workflows do, the service accounts they need, and the GitHub variables to set.
 Read it before scaffolding one, because a template that deploys needs more

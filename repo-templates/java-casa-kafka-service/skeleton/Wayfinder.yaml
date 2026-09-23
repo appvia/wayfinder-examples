@@ -1,0 +1,188 @@
+# What gets deployed, and what each part is allowed to reach.
+#
+# Placeholders filled in at deploy time, not when you edit:
+#
+#   $${{ ... }}  A Wayfinder expression — a component's output, or a fact about
+#               the stack. Resolved in dependency order as the deploy runs.
+#   ${RELEASE}  Supplied with `wf deploy --env-var RELEASE=...`. It tags both
+#               container images, and message-service reports it on /api/healthz.
+#
+# The VPC and the Kafka cluster are not built here. `network` and `kafka` find
+# the ones the platform team built for the environment you deploy to, by tag,
+# and the deploy fails on its first component when either is missing. See
+# README.md for the tags.
+#
+# Deploy it yourself with:
+#   wf deploy -f Wayfinder.yaml -i ${{ .Inputs.serviceName }}-dev -w <workspace> -e <environment> \
+#     --identity <workspace>/<environment>/aws-<environment> --region <region> \
+#     --env-var RELEASE=$(git describe --always --dirty)
+apiVersion: v1
+name: ${{ .Stack.Name }}
+description: "${{ .Inputs.description }}"
+
+components:
+
+  # The environment's VPC and its public and private subnets, found by their
+  # Environment and Tier tags. Creates nothing.
+  network:
+    type: CloudResource
+    plan: file:plans/aws-vpc-discovery.yaml
+
+  # The environment's MSK cluster, found by its Environment and KafkaCluster
+  # tags. Creates nothing. Clients sign in with IAM, so there is no Kafka
+  # password anywhere: the `api` component is granted `produce-consume` on it, and
+  # Wayfinder writes that grant into its task role.
+  kafka:
+    type: CloudResource
+    plan: file:plans/aws-msk-discovery.yaml
+    inputs:
+      - name: cluster
+        value: ${{ .Inputs.kafkaCluster }}
+
+  # ECS cluster and the public load balancer both services sit behind, in the
+  # discovered VPC.
+  platform:
+    type: CloudResource
+    plan: file:plans/aws-ecs-platform.yaml
+    inputs:
+      - name: vpc_id
+        value: "$${{ .Components.network.vpc_id }}"
+      - name: public_subnet_ids
+        value: "$${{ .Components.network.public_subnet_ids | toTFVars }}"
+
+  # HTTPS for the whole site. CloudFront answers on its own *.cloudfront.net
+  # name and sends every request, uncached, to the load balancer, which accepts
+  # connections from CloudFront and nothing else. Set hosted_zone_name and
+  # hostname to put it on a domain of your own.
+  web:
+    type: CloudResource
+    plan: file:plans/aws-cloudfront-alb.yaml
+    inputs:
+      - name: alb_dns_name
+        value: "$${{ .Components.platform.alb_dns_name }}"
+
+  # Makes sure both images for this RELEASE are in ECR, building only what is
+  # missing. See .wayfinder/ensure-image.sh. Runs with the deployment
+  # identity's own credentials.
+  pushimages:
+    type: LocalAction
+    withAccess:
+      - targetName: cloud
+    localAction:
+      run: |-
+        for app in message-service frontend; do
+          bash .wayfinder/ensure-image.sh \
+            "$app" \
+            ${{ .Inputs.serviceName }}-$app \
+            $${{ .Cloud.AWS.Account }}.dkr.ecr.$${{ .Cloud.Region }}.amazonaws.com/${{ .Inputs.serviceName }}-$app \
+            ${RELEASE} \
+            $${{ .Cloud.Region }}
+        done
+
+  # message-service. Publishes a MessageSubmitted Avro record for every message
+  # and consumes it again to mark the message RECEIVED. Serves /api/* on the
+  # load balancer.
+  #
+  # The tasks run in the PUBLIC subnets with a public IP, so they can pull their
+  # image from ECR without a NAT gateway. If your VPC has one, change
+  # public_subnet_ids to private_subnet_ids here and on `frontend`, and set
+  # assign_public_ip to false.
+  api:
+    type: CloudResource
+    plan: file:plans/aws-ecs-fargate-service.yaml
+    needs: [pushimages]
+    workloadIdentity:
+      access:
+        - to: kafka
+          consumptionPolicy: produce-consume
+    inputs:
+      - name: suffix
+        value: api
+      - name: cluster_arn
+        value: "$${{ .Components.platform.cluster_arn }}"
+      - name: vpc_id
+        value: "$${{ .Components.network.vpc_id }}"
+      - name: subnet_ids
+        value: "$${{ .Components.network.public_subnet_ids | toTFVars }}"
+      - name: security_group_ids
+        value:
+          - "$${{ .Components.platform.tasks_security_group_id }}"
+      - name: alb_listener_arn
+        value: "$${{ .Components.platform.alb_listener_arn }}"
+      - name: path_patterns
+        value:
+          - "/api/*"
+      - name: listener_rule_priority
+        value: 10
+      - name: container_port
+        value: 8080
+      - name: health_check_path
+        value: /api/healthz
+      - name: health_check_grace_seconds
+        value: 120
+      - name: image_repository
+        value: ${{ .Inputs.serviceName }}-message-service
+      - name: image_tag
+        value: "${RELEASE}"
+    terraform:
+      tfVarsTemplate: |-
+        env = {
+          SPRING_PROFILES_ACTIVE  = "aws"
+          KAFKA_BOOTSTRAP_SERVERS = "$${{ .Components.kafka.bootstrap_brokers }}"
+          AWS_REGION              = "$${{ .Cloud.Region }}"
+        }
+
+  # The GOV.UK CASA page. Serves everything message-service does not, and sends
+  # each message to it through the CloudFront URL: the load balancer refuses
+  # the task's own public address.
+  frontend:
+    type: CloudResource
+    plan: file:plans/aws-ecs-fargate-service.yaml
+    needs: [pushimages, api, web]
+    inputs:
+      - name: suffix
+        value: frontend
+      - name: cluster_arn
+        value: "$${{ .Components.platform.cluster_arn }}"
+      - name: vpc_id
+        value: "$${{ .Components.network.vpc_id }}"
+      - name: subnet_ids
+        value: "$${{ .Components.network.public_subnet_ids | toTFVars }}"
+      - name: security_group_ids
+        value:
+          - "$${{ .Components.platform.tasks_security_group_id }}"
+      - name: alb_listener_arn
+        value: "$${{ .Components.platform.alb_listener_arn }}"
+      - name: path_patterns
+        value:
+          - "/*"
+      - name: listener_rule_priority
+        value: 100
+      - name: container_port
+        value: 3000
+      - name: health_check_path
+        value: /healthz
+      - name: cpu
+        value: 256
+      - name: memory
+        value: 512
+      - name: image_repository
+        value: ${{ .Inputs.serviceName }}-frontend
+      - name: image_tag
+        value: "${RELEASE}"
+    terraform:
+      tfVarsTemplate: |-
+        env = {
+          MESSAGE_SERVICE_URL = "https://$${{ .Components.web.cloudfront_url }}"
+        }
+
+  # Asks the deployed instance for an answer: both services are healthy, the
+  # page renders, and a message sent to the API reads back as RECEIVED — which
+  # only happens once its Avro record has gone through Kafka and been consumed.
+  # A deploy with a broken pipeline fails here.
+  smoke:
+    type: LocalAction
+    needs: [frontend]
+    localAction:
+      run: |-
+        make smoke URL=https://$${{ .Components.web.cloudfront_url }}

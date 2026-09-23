@@ -1,0 +1,9 @@
+{#
+ # The message page. Adds the demo phase banner to CASA's journey layout.
+ #}
+{% extends "casa/layouts/journey.njk" %}
+
+{% block serviceNavigation %}
+  {{ super() }}
+  {% include "partials/phase-banner.njk" %}
+{% endblock %}

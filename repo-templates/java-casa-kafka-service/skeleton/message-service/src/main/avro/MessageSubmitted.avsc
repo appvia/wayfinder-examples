@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "MessageSubmitted",
+  "namespace": "com.example.messages.events",
+  "doc": "A message was accepted by message-service and given a reference.",
+  "fields": [
+    {"name": "reference", "type": {"type": "string", "avro.java.string": "String"}},
+    {"name": "message", "type": {"type": "string", "avro.java.string": "String"}},
+    {"name": "submittedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

@@ -1,0 +1,90 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-vpc-discovery
+  version: "1.0.0"
+spec:
+  cloud: aws
+  resourceType: dependency
+  category: networking
+  description: "Finds the VPC the platform team built for the environment being deployed to, by its Environment tag, and its public and private subnets by their Tier tag. Creates nothing. Fails the deploy unless exactly one VPC in the account and region carries Environment=<environment>."
+  inputs:
+    - name: environment
+      description: "Value of the Environment tag to look for. Leave unset to use the name of the environment being deployed to."
+      type: string
+      optional: true
+  outputs:
+    - name: vpc_id
+      description: "ID of the discovered VPC, e.g. vpc-0a1b2c3d4e5f67890."
+      type: string
+    - name: vpc_cidr
+      description: "Primary IPv4 CIDR of the discovered VPC, e.g. 10.20.0.0/22."
+      type: string
+    - name: public_subnet_ids
+      description: "IDs of the VPC's subnets tagged Tier=public."
+      type: list(string)
+    - name: private_subnet_ids
+      description: "IDs of the VPC's subnets tagged Tier=private."
+      type: list(string)
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          locals {
+            environment = "${{ .Inputs.environment | default .Environment }}"
+          }
+
+          data "aws_vpcs" "matched" {
+            tags = {
+              Environment = local.environment
+            }
+          }
+
+          data "aws_vpc" "this" {
+            id = one(data.aws_vpcs.matched.ids)
+
+            lifecycle {
+              precondition {
+                condition     = length(data.aws_vpcs.matched.ids) == 1
+                error_message = "Expected exactly one VPC tagged Environment=${local.environment} in this account and region, found ${length(data.aws_vpcs.matched.ids)}. Create one with the onboard-aws workflow's createVpc input, or tag the platform VPC."
+              }
+            }
+          }
+
+          data "aws_subnets" "public" {
+            filter {
+              name   = "vpc-id"
+              values = [data.aws_vpc.this.id]
+            }
+            tags = {
+              Tier = "public"
+            }
+          }
+
+          data "aws_subnets" "private" {
+            filter {
+              name   = "vpc-id"
+              values = [data.aws_vpc.this.id]
+            }
+            tags = {
+              Tier = "private"
+            }
+          }
+      - name: outputs.tf
+        template: |
+          output "vpc_id" {
+            description = "ID of the discovered VPC."
+            value       = data.aws_vpc.this.id
+          }
+          output "vpc_cidr" {
+            description = "Primary IPv4 CIDR of the discovered VPC."
+            value       = data.aws_vpc.this.cidr_block
+          }
+          output "public_subnet_ids" {
+            description = "IDs of the VPC's subnets tagged Tier=public."
+            value       = sort(data.aws_subnets.public.ids)
+          }
+          output "private_subnet_ids" {
+            description = "IDs of the VPC's subnets tagged Tier=private."
+            value       = sort(data.aws_subnets.private.ids)
+          }

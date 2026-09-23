@@ -1,0 +1,354 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-ecs-fargate-service
+  version: "1.0.0"
+spec:
+  cloud: aws
+  resourceType: runtime
+  category: compute
+  description: "One container on ECS Fargate behind the shared platform ALB, answering the paths in path_patterns. Suffix combined with stack+instance yields a unique service name. Its Wayfinder workload identity is both the task role and the execution role, so the container pulls its image, writes its logs and reaches any resource it is granted with no hand-written IAM role."
+  workloadIdentity:
+    identityType: AWSRole
+    optional: false
+    basePermissions:
+      aws:
+        # The same role is the task execution role, so it needs to pull from this
+        # account's ECR and write to the service's log group as well as whatever
+        # the application itself is granted through consumption policies.
+        customIAMPolicyTemplate: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "ECRAuth",
+                "Effect": "Allow",
+                "Action": [
+                  "ecr:GetAuthorizationToken"
+                ],
+                "Resource": "*"
+              },
+              {
+                "Sid": "ECRPull",
+                "Effect": "Allow",
+                "Action": [
+                  "ecr:BatchGetImage",
+                  "ecr:GetDownloadUrlForLayer",
+                  "ecr:BatchCheckLayerAvailability"
+                ],
+                "Resource": "arn:aws:ecr:${{ .Cloud.Region }}:${{ .Cloud.AWS.Account }}:repository/*"
+              },
+              {
+                "Sid": "AppLog",
+                "Effect": "Allow",
+                "Action": [
+                  "logs:CreateLogGroup",
+                  "logs:CreateLogStream",
+                  "logs:PutLogEvents"
+                ],
+                "Resource": [
+                  "arn:aws:logs:${{ .Cloud.Region }}:${{ .Cloud.AWS.Account }}:log-group:/ecs/${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}",
+                  "arn:aws:logs:${{ .Cloud.Region }}:${{ .Cloud.AWS.Account }}:log-group:/ecs/${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}:*"
+                ]
+              }
+            ]
+          }
+    restrictAccessTo:
+      # No resourceIDTemplate: ECS assumes task and execution roles without an
+      # aws:SourceArn naming the service, so a condition on one stops every task
+      # from starting.
+      trustedService: "ecs-tasks.amazonaws.com"
+  outputs:
+    - name: service_name
+      description: "Name of the ECS service."
+      type: string
+    - name: task_definition_arn
+      description: "ARN of the task definition revision the service runs."
+      type: string
+    - name: target_group_arn
+      description: "ARN of the ALB target group the service's tasks register in."
+      type: string
+    - name: log_group_name
+      description: "CloudWatch log group the container writes to, /ecs/<service name>."
+      type: string
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          variable "env" {
+            type    = map(string)
+            default = {}
+          }
+
+          locals {
+            service_name   = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}"
+            container_port = ${{ .Inputs.container_port | default 8080 }}
+
+            # Target group names are at most 32 characters of letters, digits and
+            # hyphens. A truncated service name plus 8 characters of a hash of the
+            # name and port keeps it unique, and gives a new port a new name so the
+            # replacement group can be created before the old one is destroyed.
+            target_group_name = "${replace(substr(local.service_name, 0, 23), "/-+$/", "")}-${substr(md5("${local.service_name}:${local.container_port}"), 0, 8)}"
+
+            # Either a full image URI, or a repository name and tag in this account's
+            # own ECR registry, whose address follows from the account and region the
+            # plan is deploying into.
+            image_uri = ${{ if .Inputs.container_image_uri }}${{ .Inputs.container_image_uri | quote }}${{ else }}"${{ .Cloud.AWS.Account }}.dkr.ecr.${{ .Cloud.Region }}.amazonaws.com/${{ .Inputs.image_repository }}:${{ .Inputs.image_tag }}"${{ end }}
+
+            environment = merge(var.env, {
+              APP_NAME = "${{ .Stack.Name }}"
+              APP_ENV  = "${{ .Stack.Instance.Name }}"
+            })
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          resource "aws_cloudwatch_log_group" "this" {
+            name              = "/ecs/${local.service_name}"
+            retention_in_days = 7
+
+            tags = local.tags
+          }
+
+          resource "aws_ecs_task_definition" "this" {
+            family                   = local.service_name
+            network_mode             = "awsvpc"
+            requires_compatibilities = ["FARGATE"]
+            cpu                      = "${{ .Inputs.cpu | default 512 }}"
+            memory                   = "${{ .Inputs.memory | default 1024 }}"
+
+            # Both roles are the Wayfinder workload identity; do not create either.
+            task_role_arn      = "${{ .WorkloadIdentity.AWS.RoleARN }}"
+            execution_role_arn = "${{ .WorkloadIdentity.AWS.RoleARN }}"
+
+            runtime_platform {
+              operating_system_family = "LINUX"
+              cpu_architecture        = "X86_64"
+            }
+
+            container_definitions = jsonencode([
+              {
+                name      = "app"
+                image     = local.image_uri
+                essential = true
+
+                portMappings = [
+                  {
+                    containerPort = local.container_port
+                    protocol      = "tcp"
+                  }
+                ]
+
+                environment = [for k, v in local.environment : { name = k, value = v }]
+
+                logConfiguration = {
+                  logDriver = "awslogs"
+                  options = {
+                    "awslogs-group"         = aws_cloudwatch_log_group.this.name
+                    "awslogs-region"        = "${{ .Cloud.Region }}"
+                    "awslogs-stream-prefix" = "app"
+                  }
+                }
+              }
+            ])
+
+            tags = local.tags
+          }
+
+          resource "aws_lb_target_group" "this" {
+            name                 = local.target_group_name
+            vpc_id               = "${{ .Inputs.vpc_id }}"
+            target_type          = "ip"
+            protocol             = "HTTP"
+            port                 = local.container_port
+            deregistration_delay = 15
+
+            health_check {
+              enabled             = true
+              path                = "${{ .Inputs.health_check_path | default "/healthz" }}"
+              protocol            = "HTTP"
+              matcher             = "200-399"
+              interval            = 15
+              timeout             = 5
+              healthy_threshold   = 2
+              unhealthy_threshold = 3
+            }
+
+            lifecycle {
+              create_before_destroy = true
+            }
+
+            tags = local.tags
+          }
+
+          resource "aws_lb_listener_rule" "this" {
+            listener_arn = "${{ .Inputs.alb_listener_arn }}"
+            priority     = ${{ .Inputs.listener_rule_priority }}
+
+            action {
+              type             = "forward"
+              target_group_arn = aws_lb_target_group.this.arn
+            }
+
+            condition {
+              path_pattern {
+                values = ${{ if .Inputs.path_patterns }}${{ .Inputs.path_patterns | toJson }}${{ else }}["/*"]${{ end }}
+              }
+            }
+
+            tags = local.tags
+          }
+
+          resource "aws_ecs_service" "this" {
+            name            = local.service_name
+            cluster         = "${{ .Inputs.cluster_arn }}"
+            task_definition = aws_ecs_task_definition.this.arn
+            desired_count   = ${{ .Inputs.desired_count | default 1 }}
+            launch_type     = "FARGATE"
+
+            network_configuration {
+              subnets          = ${{ .Inputs.subnet_ids | toJson }}
+              security_groups  = ${{ .Inputs.security_group_ids | toJson }}
+              # Tasks run in public subnets with a public IP to reach ECR, because the
+              # platform has no NAT gateway. Only an explicit false turns it off.
+              assign_public_ip = ${{ if eq (toString .Inputs.assign_public_ip) "false" }}false${{ else }}true${{ end }}
+            }
+
+            load_balancer {
+              target_group_arn = aws_lb_target_group.this.arn
+              container_name   = "app"
+              container_port   = local.container_port
+            }
+
+            health_check_grace_period_seconds = ${{ .Inputs.health_check_grace_seconds | default 60 }}
+
+            deployment_circuit_breaker {
+              enable   = true
+              rollback = true
+            }
+
+            wait_for_steady_state = true
+            propagate_tags        = "SERVICE"
+
+            # The target group only receives traffic once a listener rule forwards to it.
+            depends_on = [aws_lb_listener_rule.this]
+
+            tags = local.tags
+          }
+      - name: outputs.tf
+        template: |
+          output "service_name" {
+            description = "Name of the ECS service."
+            value       = aws_ecs_service.this.name
+          }
+          output "task_definition_arn" {
+            description = "ARN of the task definition revision the service runs."
+            value       = aws_ecs_task_definition.this.arn
+          }
+          output "target_group_arn" {
+            description = "ARN of the ALB target group the service's tasks register in."
+            value       = aws_lb_target_group.this.arn
+          }
+          output "log_group_name" {
+            description = "CloudWatch log group the container writes to."
+            value       = aws_cloudwatch_log_group.this.name
+          }
+  inputs:
+    - name: suffix
+      description: "Disambiguates multiple services in one stack. Final service name: ${stack}-${instance}-${suffix} (e.g. pip-dev1-api). Pattern: ^[a-zA-Z0-9-]+$"
+      type: string
+      optional: false
+      pattern: "^[a-zA-Z0-9-]+$"
+    - name: cluster_arn
+      description: "ARN of the ECS cluster to run the service in, e.g. the platform's cluster_arn output."
+      type: string
+      optional: false
+    - name: vpc_id
+      description: "ID of the VPC the target group is created in. It must be the ALB's VPC."
+      type: string
+      optional: false
+    - name: subnet_ids
+      description: "Subnets the tasks run in. With no NAT gateway, use public subnets and leave assign_public_ip true so tasks can pull their image."
+      type: list(string)
+      optional: false
+      minItems: 1
+    - name: security_group_ids
+      description: "Security groups for the tasks, e.g. the platform's tasks_security_group_id, which admits traffic from the ALB."
+      type: list(string)
+      optional: false
+      minItems: 1
+    - name: assign_public_ip
+      description: "Give each task a public IP. Tasks in public subnets need one to reach ECR and CloudWatch when there is no NAT gateway."
+      type: bool
+      optional: true
+      defaultValue: true
+    - name: container_port
+      description: "Port the container listens on for HTTP."
+      type: number
+      optional: true
+      defaultValue: 8080
+    - name: container_image_uri
+      description: "Full URI of the container image to deploy. Leave empty to name the image by image_repository and image_tag in this account's ECR registry instead."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: image_repository
+      description: "ECR repository name in the deploying account, used with image_tag when container_image_uri is empty."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: image_tag
+      description: "Image tag in image_repository, used when container_image_uri is empty."
+      type: string
+      optional: true
+      defaultValue: ""
+    - name: cpu
+      description: "Fargate task CPU units (256, 512, 1024, 2048, 4096). Must be a valid pairing with memory."
+      type: number
+      optional: true
+      defaultValue: 512
+    - name: memory
+      description: "Fargate task memory in MiB. Must be a valid pairing with cpu, e.g. 1024-4096 for 512 CPU."
+      type: number
+      optional: true
+      defaultValue: 1024
+    - name: desired_count
+      description: "Number of tasks to keep running."
+      type: number
+      optional: true
+      defaultValue: 1
+    - name: env
+      description: "Per-service environment variables merged on top of the defaults (APP_NAME, APP_ENV). Set them through the component's terraform.tfVarsTemplate as the env variable."
+      type: map(string)
+      optional: true
+      defaultValue: {}
+    - name: health_check_path
+      description: "Path the ALB requests to decide whether a task is healthy. Any 200-399 response counts as healthy."
+      type: string
+      optional: true
+      defaultValue: "/healthz"
+    - name: alb_listener_arn
+      description: "ARN of the ALB listener to add this service's rule to, e.g. the platform's alb_listener_arn output."
+      type: string
+      optional: false
+    - name: path_patterns
+      description: "Request paths the ALB forwards to this service, e.g. [\"/api/*\"]. At most 5 patterns."
+      type: list(string)
+      optional: true
+      defaultValue: ["/*"]
+      maxItems: 5
+    - name: listener_rule_priority
+      description: "Priority of this service's listener rule, 1-50000, unique on the listener. Lower numbers match first, so give a catch-all /* the highest number."
+      type: number
+      optional: false
+      minimum: 1
+      maximum: 50000
+    - name: health_check_grace_seconds
+      description: "Seconds after a task starts before failed ALB health checks count against it. Raise it for slow-starting containers such as a JVM."
+      type: number
+      optional: true
+      defaultValue: 60

@@ -1,0 +1,39 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: message-service
+  cloud:
+    function:
+      definition: recordMessage
+    stream:
+      # Created at startup rather than on the first send, so a broken Kafka
+      # connection shows up before the first message arrives.
+      output-bindings: messageSubmitted-out-0
+      bindings:
+        messageSubmitted-out-0:
+          destination: ${messages.topic}
+          content-type: application/avro
+        recordMessage-in-0:
+          destination: ${messages.topic}
+          group: ${messages.group}
+          content-type: application/avro
+      kafka:
+        binder:
+          brokers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+          auto-create-topics: true
+
+messages:
+  topic: messages.message-submitted
+  group: message-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

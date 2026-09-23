@@ -1,0 +1,15 @@
+{% extends "layouts/main.njk" %}
+
+{% block pageTitle %}Sorry, there is a problem with the service - {{ t("common:serviceName") }}{% endblock %}
+
+{% block content %}
+<div class="govuk-grid-row">
+  <div class="govuk-grid-column-two-thirds">
+    <h1 class="govuk-heading-l">Sorry, there is a problem with the service</h1>
+    <p class="govuk-body">We could not send your message.</p>
+    <p class="govuk-body">
+      <a href="{{ casa.mountUrl }}message" class="govuk-link">Go back</a> and try again.
+    </p>
+  </div>
+</div>
+{% endblock %}

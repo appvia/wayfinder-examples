@@ -1,0 +1,119 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-msk-discovery
+  version: "1.0.0"
+spec:
+  cloud: aws
+  resourceType: dependency
+  category: messaging
+  description: "Finds an MSK cluster already running in the account by its Environment and KafkaCluster tags and returns its IAM bootstrap brokers. Creates nothing. A consumer's workload identity is granted topic and consumer-group access to it through the produce-consume policy."
+  inputs:
+    - name: cluster
+      description: "Value of the KafkaCluster tag to look for, e.g. orders. Defaults to \"default\", the name the aws-msk-kafka template uses unless told otherwise."
+      type: string
+      optional: true
+      defaultValue: default
+    - name: environment
+      description: "Value of the Environment tag to look for. Leave unset to use the name of the environment being deployed to."
+      type: string
+      optional: true
+  outputs:
+    - name: bootstrap_brokers
+      description: "Comma-separated host:port list for Kafka clients using IAM authentication (SASL/IAM on port 9098)."
+      type: string
+    - name: cluster_arn
+      description: "ARN of the discovered MSK cluster, e.g. arn:aws:kafka:eu-west-2:123456789012:cluster/orders-dev/1a2b3c4d-..."
+      type: string
+    - name: cluster_name
+      description: "Name of the discovered MSK cluster."
+      type: string
+  consumptionPolicies:
+    # MSK topic and group ARNs share the cluster ARN's REGION:ACCOUNT and
+    # NAME/UUID, with ":cluster/" replaced by ":topic/" or ":group/".
+    - name: produce-consume
+      grantPermissions:
+        aws:
+          customIAMPolicyTemplate: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "kafka-cluster:Connect",
+                    "kafka-cluster:DescribeCluster"
+                  ],
+                  "Resource": "${{ .Outputs.cluster_arn }}"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "kafka-cluster:CreateTopic",
+                    "kafka-cluster:DescribeTopic",
+                    "kafka-cluster:WriteData",
+                    "kafka-cluster:ReadData",
+                    "kafka-cluster:DescribeTopicDynamicConfiguration"
+                  ],
+                  "Resource": "${{ .Outputs.cluster_arn | replace ":cluster/" ":topic/" }}/*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "kafka-cluster:AlterGroup",
+                    "kafka-cluster:DescribeGroup"
+                  ],
+                  "Resource": "${{ .Outputs.cluster_arn | replace ":cluster/" ":group/" }}/*"
+                }
+              ]
+            }
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          locals {
+            environment = "${{ .Inputs.environment | default .Environment }}"
+            cluster     = "${{ .Inputs.cluster | default "default" }}"
+          }
+
+          data "aws_resourcegroupstaggingapi_resources" "msk" {
+            resource_type_filters = ["kafka:cluster"]
+
+            tag_filter {
+              key    = "Environment"
+              values = [local.environment]
+            }
+            tag_filter {
+              key    = "KafkaCluster"
+              values = [local.cluster]
+            }
+          }
+
+          locals {
+            cluster_arns = [for r in data.aws_resourcegroupstaggingapi_resources.msk.resource_tag_mapping_list : r.resource_arn]
+          }
+
+          data "aws_msk_bootstrap_brokers" "this" {
+            cluster_arn = one(local.cluster_arns)
+
+            lifecycle {
+              precondition {
+                condition     = length(local.cluster_arns) == 1
+                error_message = "Expected exactly one MSK cluster tagged Environment=${local.environment} and KafkaCluster=${local.cluster} in this account and region, found ${length(local.cluster_arns)}. Deploy one from the aws-msk-kafka template first."
+              }
+            }
+          }
+      - name: outputs.tf
+        template: |
+          output "bootstrap_brokers" {
+            description = "Comma-separated host:port list for Kafka clients using IAM authentication."
+            value       = data.aws_msk_bootstrap_brokers.this.bootstrap_brokers_sasl_iam
+          }
+          output "cluster_arn" {
+            description = "ARN of the discovered MSK cluster."
+            value       = data.aws_msk_bootstrap_brokers.this.cluster_arn
+          }
+          output "cluster_name" {
+            description = "Name of the discovered MSK cluster."
+            value       = split("/", data.aws_msk_bootstrap_brokers.this.cluster_arn)[1]
+          }

@@ -1,0 +1,14 @@
+# Maven and npm build output.
+target/
+node_modules/
+
+# Written by `wf up` to remember the stack instance you last deployed to.
+.wfup
+
+# Written by `wf deploy --out-file`.
+deploy.json
+preview.json
+
+# Local overrides for docker compose.
+.env
+docker-compose.override.yaml

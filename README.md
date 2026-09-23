@@ -23,3 +23,4 @@ For full documentation, see the [quickstart readme](./quickstart/README.md) or [
 | [`quickstart/`](./quickstart/README.md) | Deploy your first application: example plans plus a `Wayfinder.yaml` for AWS or Azure |
 | [`workflows/incident-triage/`](./workflows/incident-triage/README.md) | Integrations and workflows end to end: a monitoring alert arrives on an inbound webhook, an AI agent investigates it autonomously, and severity-gated tasks open a GitHub issue and page Slack |
 | [`repo-templates/`](./repo-templates/README.md) | Repository templates: register one, then create a new service repository from it with `wf create stack --from-template` |
+| [`repo-templates/java-casa-kafka-service/`](./repo-templates/java-casa-kafka-service/README.md) | A Java 25 Spring Boot API and a GOV.UK CASA page on ECS Fargate, sending Avro records through the environment's Amazon MSK cluster: the DWP PIP technology stack in one page |

@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        template: [go-app, python-app, node-app, java-app, dotnet-app, java-lambda-webapp]
+        template: [go-app, python-app, node-app, java-app, dotnet-app, java-lambda-webapp, java-casa-kafka-service]
     steps:
       - uses: actions/checkout@v6
 
@@ -56,6 +56,20 @@ jobs:
       # whose own tests fail, cannot merge.
       - name: Render the skeleton
         run: repo-templates/hack/render-for-build.sh "repo-templates/${{ matrix.template }}" "${RUNNER_TEMP}/build"
+
+      # The runner's default JDK and Node are older than this template's.
+      - name: Set up Java 25
+        if: matrix.template == 'java-casa-kafka-service'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Node 22
+        if: matrix.template == 'java-casa-kafka-service'
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
 
       - name: Set up the toolchain
         working-directory: ${{ runner.temp }}/build
@@ -69,9 +83,16 @@ jobs:
         working-directory: ${{ runner.temp }}/build
         run: make test
 
+      # A template with more than one app has a Dockerfile per app and no
+      # Dockerfile at its root; its Makefile builds them all with `make images`.
       - name: Build the image
         working-directory: ${{ runner.temp }}/build
-        run: docker build --build-arg VERSION=ci -t "${{ matrix.template }}:ci" .
+        run: |
+          if [[ -f Dockerfile ]]; then
+            docker build --build-arg VERSION=ci -t "${{ matrix.template }}:ci" .
+          else
+            make images RELEASE=ci
+          fi
 
   chart:
     name: Helm chart

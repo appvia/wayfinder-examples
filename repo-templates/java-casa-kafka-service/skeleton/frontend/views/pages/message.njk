@@ -1,0 +1,44 @@
+{% extends "layouts/journey.njk" %}
+
+{% from "casa/components/character-count/macro.njk" import casaGovukCharacterCount with context %}
+{% from "govuk/components/summary-list/macro.njk" import govukSummaryList %}
+
+{% block casaPageTitle %}{{ t("common:serviceName") }}{% endblock %}
+
+{#
+ # While the last message is not yet RECEIVED, reload every 3 seconds so the
+ # status changes without the user doing anything.
+ #}
+{% block head %}
+  {{ super() }}
+  {% if lastReference and lastStatus != "RECEIVED" %}
+    <meta http-equiv="refresh" content="3">
+  {% endif %}
+{% endblock %}
+
+{% block journey_form %}
+  <h1 class="govuk-heading-xl">{{ t("common:serviceName") }}</h1>
+
+  {% if lastReference %}
+    <h2 class="govuk-heading-m">Your last message</h2>
+    {{ govukSummaryList({
+      rows: [
+        { key: { text: "Reference" }, value: { html: "<span id=\"message-reference\">" + lastReference | escape + "</span>" } },
+        { key: { text: "Status" }, value: { html: "<span id=\"message-status\">" + (lastStatus or "Not available yet") | escape + "</span>" } }
+      ]
+    }) }}
+    <p class="govuk-body">
+      <strong>SUBMITTED</strong> means message-service has accepted it and published it to Kafka.
+      <strong>RECEIVED</strong> means message-service has read it back off the topic.
+    </p>
+  {% endif %}
+
+  {{ casaGovukCharacterCount({
+    name: "message",
+    value: formData.message,
+    maxlength: 500,
+    label: { text: "Message", classes: "govuk-label--m" },
+    hint: { text: "It is sent to Kafka and read back again. Do not enter personal information." },
+    casaErrors: formErrors
+  }) }}
+{% endblock %}

@@ -1,0 +1,207 @@
+# Pull request checks.
+#
+# Tests both apps, validates the stack against Wayfinder without applying
+# anything, then deploys a throwaway preview instance and comments its URL on
+# the pull request. The preview is destroyed by wf-preview-teardown.yaml when
+# the pull request closes.
+#
+# There is no image build here. The stack's `pushimages` component builds both
+# images and pushes them to this service's own ECR repositories, creating those
+# repositories the first time anything deploys, so there is no registry to log
+# into and no registry credential to store. That component runs on this runner,
+# which is why the deploy jobs run on a plain ubuntu runner rather than in a
+# container: they need docker and make, which the runner already has. The Java
+# and Node builds happen inside the Dockerfiles, so the deploy jobs need no JDK
+# or Node of their own.
+#
+# Every job that talks to Wayfinder declares `environment: preview`. GitHub
+# scopes the OIDC token to that environment, and the preview service account
+# trusts that token and no other, so a job that dropped the line could not sign
+# in at all. Declaring it is also what shows the job the WAYFINDER_* variables
+# Wayfinder set on the preview environment when it created this repository.
+#
+# This file is copied into your repository verbatim — Wayfinder does not
+# template it, so you can edit it like any other workflow.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write # lets GitHub mint the OIDC token Wayfinder authenticates with
+
+# Runs for one pull request are serialised rather than cancelled: a cancelled
+# `wf deploy` can leave a half-applied stack and orphaned cloud resources.
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # message-service compiles for Java 25. The runner ships older JDKs and
+      # defaults to one of them; this puts 25 first and caches the Maven
+      # repository.
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: message-service/pom.xml
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test
+        run: make test
+
+      - name: Lint
+        run: make lint
+
+  validate:
+    name: Validate stack
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_SERVICE_ACCOUNT }}
+      WAYFINDER_ENVIRONMENT: ${{ vars.WAYFINDER_ENVIRONMENT }}
+      WF_REGION: ${{ vars.WF_REGION }}
+      WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the Wayfinder CLI
+        run: bash .wayfinder/install-wf.sh
+
+      # Plans the deployment server-side and applies none of it — no image is
+      # built and no LocalAction runs. Note that when Wayfinder.yaml refers to a
+      # plan as `file:plans/...`, that plan IS published to the workspace
+      # catalogue even on a dry run, so the service account needs catalogue
+      # write as well as deploy rights.
+      - name: Validate the stack
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          source .wayfinder/ci.env
+
+          # The cloud identity sits in the same workspace as the service
+          # account, which is the middle segment of tenant:workspace:name.
+          workspace="$(cut -d: -f2 <<<"${WAYFINDER_SERVICE_ACCOUNT}")"
+
+          wf deploy --dry-run --non-interactive \
+            -i "${WF_SERVICE_NAME}-pr${PR_NUMBER}" \
+            -e "${WAYFINDER_ENVIRONMENT}" \
+            -f Wayfinder.yaml \
+            --env-var RELEASE="pr-${PR_NUMBER}" \
+            --identity "${WF_IDENTITY:-${workspace}/${WAYFINDER_ENVIRONMENT}/aws-${WAYFINDER_ENVIRONMENT}}" \
+            --region "${WF_REGION}"
+
+  preview:
+    name: Preview environment
+    needs: [test, validate]
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_SERVICE_ACCOUNT }}
+      WAYFINDER_ENVIRONMENT: ${{ vars.WAYFINDER_ENVIRONMENT }}
+      WF_REGION: ${{ vars.WF_REGION }}
+      WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the Wayfinder CLI
+        run: bash .wayfinder/install-wf.sh
+
+      # RELEASE tags both images and is baked into message-service, so the
+      # /api/healthz response of a running preview names the commit it came
+      # from.
+      - name: Deploy the preview instance
+        id: deploy
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          source .wayfinder/ci.env
+
+          # The cloud identity sits in the same workspace as the service
+          # account, which is the middle segment of tenant:workspace:name.
+          workspace="$(cut -d: -f2 <<<"${WAYFINDER_SERVICE_ACCOUNT}")"
+
+          # One instance per pull request, so two open pull requests never
+          # deploy over each other. The name is passed on to the comment step.
+          instance="${WF_SERVICE_NAME}-pr${PR_NUMBER}"
+          echo "WF_INSTANCE=${instance}" >> "$GITHUB_ENV"
+
+          # 45m: the CloudFront distribution has taken 26 minutes of a 30 minute
+          # deploy in the sibling Lambda templates, and the frontend waits for
+          # it; both ECS services then have to reach a steady state before the
+          # smoke check can run. The VPC and the Kafka cluster already exist.
+          wf deploy --non-interactive --timeout 45m \
+            -i "${instance}" \
+            -e "${WAYFINDER_ENVIRONMENT}" \
+            -f Wayfinder.yaml \
+            --env-var RELEASE="pr-${PR_NUMBER}-${GITHUB_SHA:0:7}" \
+            --label "preview:pr-${PR_NUMBER}" \
+            --out-file ./preview.json \
+            --identity "${WF_IDENTITY:-${workspace}/${WAYFINDER_ENVIRONMENT}/aws-${WAYFINDER_ENVIRONMENT}}" \
+            --region "${WF_REGION}"
+
+          # CloudFront serves the site on its own *.cloudfront.net name unless
+          # the web component is given a domain.
+          host="$(jq -r '.componentOutputs.web.cloudfront_url.value // empty' ./preview.json)"
+          if [[ -n "${host}" ]]; then
+            echo "url=https://${host}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment the preview URL on the pull request
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          PREVIEW_INSTANCE: ${{ env.WF_INSTANCE }}
+          PREVIEW_ENVIRONMENT: ${{ env.WAYFINDER_ENVIRONMENT }}
+        with:
+          script: |
+            const info = {
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            }
+            const marker = '<!-- wayfinder-preview -->'
+            const url = process.env.PREVIEW_URL
+            const link = url
+              ? `**${url}**`
+              : '_Deployed, but the stack published no web address._'
+            const body = [
+              marker,
+              '### Wayfinder preview environment',
+              '',
+              link,
+              '',
+              `<sub>Instance \`${process.env.PREVIEW_INSTANCE}\` in environment ` +
+                `\`${process.env.PREVIEW_ENVIRONMENT}\` · commit ${context.sha.substring(0, 7)} · ` +
+                'destroyed automatically when this pull request closes.</sub>',
+            ].join('\n')
+
+            for (const comment of (await github.rest.issues.listComments(info)).data) {
+              if (comment.user.type === 'Bot' && comment.body.includes(marker)) {
+                await github.rest.issues.updateComment({ ...info, comment_id: comment.id, body })
+                return
+              }
+            }
+            await github.rest.issues.createComment({ ...info, body })
