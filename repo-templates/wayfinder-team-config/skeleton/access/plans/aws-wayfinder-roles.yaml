@@ -12,13 +12,12 @@
 #
 # ── THE TRUST POLICY IS NOT A CHOICE ──────────────────────────────────────────
 #
-# Wayfinder computes the issuer, audience and subject a role must assert in
-# GetExternalIdentityOIDCTrust (server/org/services/identity/cloudtokens.go). A role
-# whose trust says anything else is created successfully and then never assumed - the
-# ExternalIdentity naming it stays unverified. The three values, in that file's terms:
+# Wayfinder decides the issuer, audience and subject a role must trust. A role whose
+# trust says anything else is created successfully and then never assumed - the
+# ExternalIdentity naming it stays unverified. The three values:
 #
 #   issuer    the instance's public API URL with the scheme and any trailing slash
-#             removed, e.g. "api.develop.test.wayfinder.run" - both the OIDC provider's
+#             removed, e.g. "api.wayfinder.example.com" - both the OIDC provider's
 #             own identity and the prefix of the two condition keys
 #   audience  "wayfinder:aws:<account-id>" - per cloud and account, so a token minted
 #             for one account cannot be replayed against another
@@ -69,7 +68,7 @@ spec:
     - name: issuer_url
       description: >-
         This Wayfinder instance's public API URL, e.g.
-        "https://api.develop.test.wayfinder.run". The account's OIDC provider was created
+        "https://api.wayfinder.example.com". The account's OIDC provider was created
         to trust it during the vend, and this must name the same one - a role trusting a
         provider that is not there fails to create.
       type: string

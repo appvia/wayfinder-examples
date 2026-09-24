@@ -4,8 +4,7 @@
 Everything here can be answered without a Wayfinder server: it checks the things
 that are true of a template by construction. The parts that need the real
 template engine — that a skeleton renders at all, and that Wayfinder.yaml comes
-out as a readable stack — are covered by the render test in the wayfinder
-repository and by `wf create stack --dry-run`.
+out as a readable stack — are checked by `wf create stack --dry-run`.
 
     usage: repo-templates/hack/check-templates.py [repo-templates-dir]
 

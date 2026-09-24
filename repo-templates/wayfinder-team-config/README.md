@@ -167,7 +167,7 @@ and calls do not exist yet:
 | A CI service account, with a **federated** credential pinned to `refs/heads/main` | named by `serviceAccount` |
 | A `deployer` role binding for that service account in the workspace | so `wf apply` may write |
 
-The `onboard-aws` example in the Wayfinder repository creates all three. Leave `main` unprotected on the scaffolded repository: if a
+Create all three before scaffolding, with `wf` or a platform team's onboarding workflow. Leave `main` unprotected on the scaffolded repository: if a
 ruleset protects it, Wayfinder correctly opens a pull request instead of
 committing to `main`, so nothing lands, no CI fires, and onboarding quietly stops
 being automatic.

@@ -96,8 +96,7 @@ Clients connect to `bootstrap_brokers` with SASL/IAM over TLS on port 9098.
 - **A VPC tagged for each environment**, in the account and region each
   environment deploys to: `Environment=<environment>` and `ManagedBy=Wayfinder`
   on the VPC, `Tier=private` on at least two subnets in different availability
-  zones. The `onboard-aws` workflow in the Wayfinder repository
-  (`examples/workflows/onboard-aws`) creates one when run with `createVpc`.
+  zones. A VPC you already have works once it and its subnets carry these tags.
 - **A cloud identity per environment** named
   `<workspace>/<environment>/aws-<environment>`, or set the `WF_IDENTITY`
   variable on the GitHub environment to the one to use. It must be able to
