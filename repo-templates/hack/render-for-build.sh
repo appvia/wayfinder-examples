@@ -8,8 +8,8 @@
 # engine. It substitutes the simple `${{ .Inputs.x }}` style references and
 # renames templated directories, which is all that is needed to answer "does
 # this skeleton actually build and pass its own tests". Conditionals appear only
-# in Wayfinder.yaml, which is excluded here and checked properly by the render
-# test in the wayfinder repository and by `wf create stack --dry-run`.
+# in Wayfinder.yaml, which is excluded here and checked properly by
+# `wf create stack --dry-run`.
 set -euo pipefail
 
 template_dir="${1:?usage: render-for-build.sh <template-dir> <output-dir>}"
@@ -50,9 +50,8 @@ MANIFEST = sys.argv[2]
 NAME_LIKE = {"serviceName", "packageName", "name", "appName", "moduleName"}
 
 # Everything Wayfinder's render context exposes to a skeleton, so a template
-# that reads any of it renders here too. The list is RenderOptions in
-# server/sourcecontrol/services/repotemplates/render.go in the wayfinder
-# repository, and is written out in ../ANATOMY.md.
+# that reads any of it renders here too. The list is written out in
+# ../ANATOMY.md.
 CONTEXT = {
     ".Repo.Organization": "example-org",
     ".Repo.Name": "example-service",

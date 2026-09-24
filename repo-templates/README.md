@@ -46,8 +46,8 @@ application in an environment shares.
 | [`aws-msk-kafka/`](./aws-msk-kafka) | One MSK Serverless Kafka cluster per environment in the platform VPC, deployed on merge and on a tag | Shared infrastructure found **by tag**: application stacks look it up with `aws-msk-discovery` and sign in with IAM, so none is given its ARN or a password. A pull request only dry-runs, because a preview cluster would carry the same tags |
 
 `wayfinder-team-config` is the second half of an onboarding flow: something has to create the workspace,
-the CI service account and its federated credential first. The `onboard-aws`
-example in the Wayfinder repository is that first half.
+the CI service account and its federated credential first, such as a platform
+team's onboarding workflow or the `wf` commands in its README.
 
 ## Teaching examples
 
@@ -139,13 +139,6 @@ cd /tmp/out && make ci-setup && make lint && make test
 ```
 
 CI runs both of those, plus `actionlint`, `helm lint` and a container build for
-every golden path. The full render, using Wayfinder's own template engine, runs
-from the wayfinder repository:
-
-```bash
-WF_EXAMPLES_DIR=$PWD go test -count=1 \
-  ./server/sourcecontrol/services/repotemplates/ -run Example
-```
-
-Pass `-count=1` — the templates live outside that module, so editing one does
-not invalidate Go's test cache and a stale pass is easy to believe.
+every golden path. To render a template with Wayfinder itself, register it from
+your branch with `--ref` and preview it with
+`wf create stack <name> --from-template <template> --dry-run`.

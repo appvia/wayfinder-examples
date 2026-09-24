@@ -1,8 +1,7 @@
 # Checks the repo templates under repo-templates/.
 #
 # Everything here is self-contained: no Wayfinder server, no credentials, no
-# cloud. The full render, using Wayfinder's own template engine, runs in the
-# wayfinder repository against a clone of this one.
+# cloud.
 name: Validate repo templates
 
 on:

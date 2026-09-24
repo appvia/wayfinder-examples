@@ -61,10 +61,9 @@ The application templates carry that plan; this one does not.
 
 - **A VPC per environment**, tagged `Environment=<environment>` and
   `ManagedBy=Wayfinder`, with at least two subnets tagged `Tier=private` in
-  different availability zones. The `onboard-aws` workflow in the Wayfinder
-  repository, `examples/workflows/onboard-aws`, creates one when run with its
-  `createVpc` input. The deploy fails unless exactly one VPC in the account and
-  region carries the environment's tag.
+  different availability zones. A VPC you already have works once it and its
+  subnets carry these tags. The deploy fails unless exactly one VPC in the
+  account and region carries the environment's tag.
 - **A cloud identity per environment**, `<workspace>/<environment>/aws-<environment>`
   unless the repository's `WF_IDENTITY` variable names another, able to create
   MSK clusters and EC2 security groups.
