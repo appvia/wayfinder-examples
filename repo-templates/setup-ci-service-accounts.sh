@@ -4,6 +4,7 @@
 # one per environment, each trusting a different GitHub OIDC subject.
 #
 #   usage: TENANT=acme WORKSPACE=team-a REPO=acme/payments SERVICE=payments \
+#            DEVELOP_ENV=dev PREVIEW_ENV=dev PROD_ENV=prod \
 #            ./setup-ci-service-accounts.sh
 #
 # The separation is the point: the credential a pull request can use must not be
@@ -28,9 +29,9 @@ WORKSPACE="${WORKSPACE:?set WORKSPACE, e.g. team-a}"
 REPO="${REPO:?set REPO in owner/repo form, e.g. acme/payments}"
 SERVICE="${SERVICE:?set SERVICE, the serviceName you scaffolded with}"
 
-DEVELOP_ENV="${DEVELOP_ENV:-dev}"
-PREVIEW_ENV="${PREVIEW_ENV:-dev}"
-PROD_ENV="${PROD_ENV:-prod}"
+DEVELOP_ENV="${DEVELOP_ENV:?set DEVELOP_ENV, the developEnvironment you scaffolded with}"
+PREVIEW_ENV="${PREVIEW_ENV:?set PREVIEW_ENV, the previewEnvironment you scaffolded with}"
+PROD_ENV="${PROD_ENV:?set PROD_ENV, the prodEnvironment you scaffolded with}"
 
 ISSUER="https://token.actions.githubusercontent.com"
 # Matches both `repo:acme/payments:…` and `repo:acme@33072293/payments@12345678:…`.

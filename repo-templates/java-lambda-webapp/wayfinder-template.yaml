@@ -33,25 +33,22 @@ inputs:
   # preview instance, merging deploys develop, and a `v*` tag deploys production —
   # see ../DELIVERY-PIPELINE.md.
   - name: previewEnvironment
-    description: Environment a pull request's preview instance is deployed to.
+    description: Environment a pull request's preview instance is deployed to. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: developEnvironment
-    description: Environment deployed to when a pull request merges.
+    description: Environment deployed to when a pull request merges. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: prodEnvironment
-    description: Environment deployed to when a `v*` tag is pushed.
+    description: Environment deployed to when a `v*` tag is pushed. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "prod"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: region
     description: >-

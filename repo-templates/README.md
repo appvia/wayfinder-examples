@@ -81,14 +81,24 @@ $ wf apply -f repo-templates/go-app/RepoTemplate-go-app.yaml
 $ wf get repotemplate go-app -o yaml
 
 # See what it produces, creating nothing
-$ wf create stack payments --from-template go-app --input serviceName=payments --dry-run
+$ wf create stack payments --from-template go-app --input serviceName=payments \
+    --input developEnvironment=dev --input previewEnvironment=dev \
+    --input prodEnvironment=prod --dry-run
 
 # Create the repository and the stack for real
 $ wf create stack payments --from-template go-app --input serviceName=payments \
+    --input developEnvironment=dev --input previewEnvironment=dev \
+    --input prodEnvironment=prod \
     --github-org github.acme --workspace team-a
 ```
 
-`serviceName` is the only required input on every service template here; `aws-msk-kafka` has none. Run
+Every service template here requires `serviceName`, and every template that
+deploys requires the environments it deploys to: `developEnvironment`,
+`previewEnvironment` and `prodEnvironment`, or `firstEnvironment` for
+`wayfinder-team-config`. In the portal those are pickers of the workspace's
+environments, with an option to create one. From the CLI, pass each with
+`--input` and name environments the workspace has: the CLI does not check them
+yet, so a missing one fails the scaffold after the repository is created. Run
 `wf get repotemplate <name> -o yaml` to see the rest with their defaults.
 
 ## How a template is laid out

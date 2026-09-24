@@ -46,11 +46,10 @@ inputs:
     maxLength: 200
 
   - name: firstEnvironment
-    description: Name of the one environment the repository starts with.
+    description: Environment the repository starts with, where the team lead is bound as a deployer. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: region
     description: Cloud region the first environment's account is vended in.

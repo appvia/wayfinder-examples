@@ -28,7 +28,9 @@ build uses a Maven base image. Add one with `mvn wrapper:wrapper` if you want it
 
 ```bash
 wf apply -f RepoTemplate-java-app.yaml
-wf create stack payments --from-template java-app --input serviceName=payments --dry-run
+wf create stack payments --from-template java-app --input serviceName=payments \
+  --input developEnvironment=dev --input previewEnvironment=dev \
+  --input prodEnvironment=prod --dry-run
 ```
 
 Drop `--dry-run` and add `--github-org` and `--workspace` to create the
@@ -54,11 +56,20 @@ payments/
 
 ## Inputs
 
-`serviceName` is the only required one. It is used for the package name,
+Four are required: `serviceName` and the three environments.
+
+`serviceName` is used for the package name,
 the image name, the Helm release and the stack instance names.
 
-Everything else is optional and defaulted, so `--input serviceName=payments
---no-input` is enough to scaffold from CI. The one worth setting deliberately
+`developEnvironment`, `previewEnvironment` and `prodEnvironment` are where a
+merge, a pull request and a release tag deploy. In the portal each one is a
+picker of this workspace's environments, with an option to create one, so
+nobody can name an environment the workspace does not have. The CLI does not
+check them yet: pass each one with `--input`, and name environments that
+exist in the workspace, or the scaffold creates the repository and then fails.
+
+Everything else is optional and defaulted, so those four `--input` flags and
+`--no-input` are enough to scaffold from CI. The one worth setting deliberately
 is `gatewayName`: name an existing Gateway API Gateway to publish the service,
 and left blank the service deploys but is reachable in-cluster only.
 

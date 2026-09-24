@@ -6,7 +6,9 @@
 #
 #   wf apply -f RepoTemplate-go-app.yaml
 #   wf get repotemplate go-app -o yaml     # check status.manifest synced
-#   wf create stack payments --from-template go-app --input serviceName=payments --dry-run
+#   wf create stack payments --from-template go-app --input serviceName=payments \
+#     --input developEnvironment=dev --input previewEnvironment=dev \
+#     --input prodEnvironment=prod --dry-run
 #
 apiVersion: sourcecontrol/v3
 kind: RepoTemplate

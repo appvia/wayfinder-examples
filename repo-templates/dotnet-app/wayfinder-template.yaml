@@ -16,9 +16,10 @@ icon: dotnet
 forStack: true
 
 inputs:
-  # The only required input. Everything else has a default so the template can
-  # be scaffolded from the catalogue, or from CI with --no-input, by supplying
-  # nothing but a name.
+  # Required: a name and the three environments. The environments are picked
+  # from the workspace in the portal, so nobody can name one the workspace does
+  # not have. Everything else has a default, so from the CLI or CI a scaffold
+  # needs only --input serviceName=... and the three --input ...Environment=...
   - name: serviceName
     description: >-
       Name of the service. Used for the Go command package, the container image,
@@ -43,25 +44,22 @@ inputs:
     maxLength: 60
 
   - name: developEnvironment
-    description: Environment deployed to on every merge to the default branch.
+    description: Environment deployed to on every merge to the default branch. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: prodEnvironment
-    description: Environment deployed to when a release tag is pushed.
+    description: Environment deployed to when a release tag is pushed. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "prod"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: previewEnvironment
-    description: Environment pull request preview instances are created in.
+    description: Environment a pull request's preview instance is deployed to. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: registry
     description: Container registry the service image is published to.

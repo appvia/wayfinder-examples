@@ -55,6 +55,34 @@ SHARED_INPUTS = [
     "gatewayNamespace",
 ]
 
+# The shared inputs a scaffold cannot go without. Every other shared input is
+# optional and defaulted, so these plus --no-input are enough from CI.
+REQUIRED_SHARED_INPUTS = {"serviceName", "developEnvironment", "prodEnvironment", "previewEnvironment"}
+
+
+def check_environment_inputs(manifest: dict, where: str, fail: Failures) -> None:
+    """Every `*Environment` input is a required pick from the workspace's environments.
+
+    With `refType: Environment` the portal offers the workspace's environments,
+    with an option to create one, so nobody can name one the workspace lacks. A
+    default of `prod` in a workspace without one passes the form and fails the
+    scaffold after the repository exists; a pattern refuses an environment the
+    picker created if its name does not match; and an optional input with no
+    default renders empty into the service account names built from it.
+    """
+    for definition in manifest.get("inputs", []) or []:
+        n = definition.get("name", "")
+        if not n.endswith("Environment"):
+            continue
+        ref = definition.get("refType") or {}
+        if ref.get("kind") != "Environment":
+            fail.add(where, f"input {n!r} must declare `refType: {{kind: Environment}}`")
+        if definition.get("optional"):
+            fail.add(where, f"input {n!r} must be required")
+        for key in ("defaultValue", "pattern"):
+            if key in definition:
+                fail.add(where, f"input {n!r} must not declare {key}; the picker only offers real environments")
+
 # Files whose ${{ }} expressions are not all Wayfinder's. A GitHub Actions
 # workflow, a Helm chart and a CloudResourcePlan each have their own templating
 # in the same delimiters, and there are two valid ways to protect it: exempt the
@@ -151,6 +179,8 @@ def check_template(root: pathlib.Path, name: str, fail: Failures) -> dict | None
     if not manifest.get("name"):
         fail.add(where, "declares no name")
 
+    check_environment_inputs(manifest, where, fail)
+
     skeleton_dir = manifest.get("skeleton", {}).get("path", "skeleton")
     skeleton = directory / skeleton_dir
     if not skeleton.is_dir():
@@ -234,13 +264,11 @@ def check_pipeline_family(root: pathlib.Path, manifests: dict[str, dict], fail: 
         if missing:
             fail.add(where, f"is missing shared inputs: {', '.join(missing)}")
         for definition in manifest.get("inputs", []) or []:
-            if definition.get("name") != "serviceName":
-                continue
-            if definition.get("optional"):
-                fail.add(where, "serviceName must be required")
-        for definition in manifest.get("inputs", []) or []:
             n = definition.get("name")
-            if n in SHARED_INPUTS and n != "serviceName":
+            if n in REQUIRED_SHARED_INPUTS:
+                if definition.get("optional"):
+                    fail.add(where, f"{n} must be required")
+            elif n in SHARED_INPUTS:
                 if not definition.get("optional"):
                     fail.add(where, f"input {n!r} must be optional, or a --no-input scaffold cannot work")
                 elif "defaultValue" not in definition:

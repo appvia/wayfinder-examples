@@ -8,8 +8,8 @@
 #   wf get repotemplate wayfinder-team-config -o yaml     # check status.manifest synced
 #   wf create coderepo wayfinder-payments -w payments \
 #     --from-template wayfinder-team-config \
-#     --input team=payments --input workspace=payments \
-#     --input serviceAccount=wayfinder-payments-ci --dry-run
+#     --input team=payments --input serviceAccount=wayfinder-payments-ci \
+#     --input teamLead=lead@example.com --input firstEnvironment=dev --dry-run
 #
 apiVersion: sourcecontrol/v3
 kind: RepoTemplate

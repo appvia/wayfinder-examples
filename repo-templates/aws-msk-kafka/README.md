@@ -75,17 +75,23 @@ The application templates carry that plan; this one does not.
 | --- | --- | --- |
 | `kafkaCluster` | `default` | The `KafkaCluster` tag and the first half of the cluster name |
 | `description` | empty | The README and the stack's description |
-| `previewEnvironment` | `dev` | Where a pull request's dry run validates |
-| `developEnvironment` | `dev` | Where a merge deploys |
-| `prodEnvironment` | `prod` | Where a `v*` tag deploys |
+| `previewEnvironment` | required | Where a pull request's dry run validates |
+| `developEnvironment` | required | Where a merge deploys |
+| `prodEnvironment` | required | Where a `v*` tag deploys |
 | `region` | `eu-west-2` | The AWS region, which must hold each environment's VPC |
+
+The three environments are pickers of the workspace's environments in the
+portal, with an option to create one. From the CLI, pass each with `--input` and
+name environments the workspace has.
 
 There is no name input. Stack instances are named after the stack the
 repository is created for, `<stack>-develop` and `<stack>-prod`.
 
 ```bash
 wf apply -f repo-templates/aws-msk-kafka/RepoTemplate-aws-msk-kafka.yaml
-wf create stack kafka --from-template aws-msk-kafka --dry-run
+wf create stack kafka --from-template aws-msk-kafka \
+  --input developEnvironment=dev --input previewEnvironment=dev \
+  --input prodEnvironment=prod --dry-run
 ```
 
 ## Checking it
