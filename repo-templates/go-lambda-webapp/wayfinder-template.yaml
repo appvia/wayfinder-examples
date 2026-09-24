@@ -36,22 +36,22 @@ inputs:
     description: Environment a pull request's preview instance is deployed to.
     type: string
     optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: developEnvironment
     description: Environment deployed to when a pull request merges.
     type: string
     optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: prodEnvironment
     description: Environment deployed to when a `v*` tag is pushed.
     type: string
     optional: true
-    defaultValue: "prod"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: region
     description: >-
