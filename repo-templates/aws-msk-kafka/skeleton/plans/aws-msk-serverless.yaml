@@ -1,0 +1,173 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: aws-msk-serverless
+  version: "2.0.0"
+spec:
+  cloud: aws
+  resourceType: dependency
+  category: messaging
+  description: "MSK Serverless Kafka cluster in an existing VPC, tagged Environment=<environment> and KafkaCluster=<cluster> so application stacks find it with aws-msk-discovery. Anything in the VPC can open TCP 9098; only a workload identity granted the produce-consume policy can sign in with IAM and use topics and consumer groups."
+  inputs:
+    - name: vpc_id
+      description: "ID of the VPC the cluster's security group is created in. It must be the VPC that holds subnet_ids."
+      type: string
+      optional: false
+    - name: vpc_cidr
+      description: "IPv4 CIDR admitted to the cluster on TCP 9098, e.g. 10.20.0.0/22. Give the VPC's own CIDR: IAM authentication, not the network, decides who may connect."
+      type: string
+      optional: false
+    - name: subnet_ids
+      description: "Private subnets the cluster is reachable from. MSK Serverless needs subnets in at least two availability zones."
+      type: list(string)
+      optional: false
+      minItems: 2
+    - name: cluster
+      description: "Value of the KafkaCluster tag, e.g. orders. The cluster is named <cluster>-<environment>. Applications look for \"default\" unless told otherwise."
+      type: string
+      optional: true
+      defaultValue: default
+      pattern: "^[a-z][a-z0-9-]*$"
+  outputs:
+    - name: bootstrap_brokers
+      description: "Comma-separated host:port list for Kafka clients using IAM authentication (SASL/IAM on port 9098)."
+      type: string
+    - name: cluster_arn
+      description: "ARN of the MSK Serverless cluster, e.g. arn:aws:kafka:eu-west-2:123456789012:cluster/default-dev/1a2b3c4d-..."
+      type: string
+    - name: cluster_name
+      description: "Name of the MSK Serverless cluster, e.g. default-dev."
+      type: string
+  consumptionPolicies:
+    # For an application that creates topics, produces to them and consumes them
+    # in consumer groups. MSK topic and group ARNs share the cluster ARN's
+    # REGION:ACCOUNT and NAME/UUID, with ":cluster/" replaced by ":topic/" or ":group/".
+    - name: produce-consume
+      grantPermissions:
+        aws:
+          customIAMPolicyTemplate: |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "KafkaCluster",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kafka-cluster:Connect",
+                    "kafka-cluster:DescribeCluster"
+                  ],
+                  "Resource": "${{ .Outputs.cluster_arn }}"
+                },
+                {
+                  "Sid": "KafkaTopics",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kafka-cluster:CreateTopic",
+                    "kafka-cluster:DescribeTopic",
+                    "kafka-cluster:WriteData",
+                    "kafka-cluster:ReadData",
+                    "kafka-cluster:DescribeTopicDynamicConfiguration"
+                  ],
+                  "Resource": "${{ .Outputs.cluster_arn | replace ":cluster/" ":topic/" }}/*"
+                },
+                {
+                  "Sid": "KafkaGroups",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kafka-cluster:AlterGroup",
+                    "kafka-cluster:DescribeGroup"
+                  ],
+                  "Resource": "${{ .Outputs.cluster_arn | replace ":cluster/" ":group/" }}/*"
+                }
+              ]
+            }
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          locals {
+            environment = "${{ .Environment }}"
+            cluster     = "${{ .Inputs.cluster | default "default" }}"
+            name_prefix = "${local.cluster}-${local.environment}"
+
+            # MSK cluster names are at most 64 characters. Past that, a truncated
+            # prefix plus 8 characters of its hash keeps the name unique.
+            cluster_name = length(local.name_prefix) <= 64 ? local.name_prefix : "${replace(substr(local.name_prefix, 0, 55), "/-+$/", "")}-${substr(md5(local.name_prefix), 0, 8)}"
+
+            subnet_ids = ${{ .Inputs.subnet_ids | toJson }}
+
+            # Environment and KafkaCluster are how application stacks find this
+            # cluster (aws-msk-discovery). Changing either strands every app
+            # that looks for it.
+            tags = {
+              Application  = "${{ .Stack.Name }}"
+              Environment  = local.environment
+              KafkaCluster = local.cluster
+              ManagedBy    = "Wayfinder"
+            }
+          }
+
+          # Named after the cluster, not the stack instance, so a second deploy of
+          # the same KafkaCluster into the same VPC fails here on a duplicate
+          # security group name instead of creating a second cluster with the same
+          # tags, which would make every application's discovery fail.
+          resource "aws_security_group" "msk" {
+            name        = "${local.cluster_name}-msk"
+            description = "MSK Serverless ${local.cluster_name}: Kafka IAM (9098) from the VPC"
+            vpc_id      = "${{ .Inputs.vpc_id }}"
+
+            tags = merge(local.tags, { Name = "${local.cluster_name}-msk" })
+          }
+
+          resource "aws_vpc_security_group_ingress_rule" "msk_from_vpc" {
+            security_group_id = aws_security_group.msk.id
+            description       = "Kafka over IAM auth from the VPC"
+            ip_protocol       = "tcp"
+            from_port         = 9098
+            to_port           = 9098
+            cidr_ipv4         = "${{ .Inputs.vpc_cidr }}"
+          }
+
+          resource "aws_vpc_security_group_egress_rule" "msk_all" {
+            security_group_id = aws_security_group.msk.id
+            description       = "All outbound"
+            ip_protocol       = "-1"
+            cidr_ipv4         = "0.0.0.0/0"
+          }
+
+          resource "aws_msk_serverless_cluster" "this" {
+            cluster_name = local.cluster_name
+
+            vpc_config {
+              subnet_ids         = local.subnet_ids
+              security_group_ids = [aws_security_group.msk.id]
+            }
+
+            client_authentication {
+              sasl {
+                iam {
+                  enabled = true
+                }
+              }
+            }
+
+            tags = local.tags
+          }
+
+          data "aws_msk_bootstrap_brokers" "this" {
+            cluster_arn = aws_msk_serverless_cluster.this.arn
+          }
+      - name: outputs.tf
+        template: |
+          output "bootstrap_brokers" {
+            description = "Comma-separated host:port list for Kafka clients using IAM authentication."
+            value       = data.aws_msk_bootstrap_brokers.this.bootstrap_brokers_sasl_iam
+          }
+          output "cluster_arn" {
+            description = "ARN of the MSK Serverless cluster."
+            value       = aws_msk_serverless_cluster.this.arn
+          }
+          output "cluster_name" {
+            description = "Name of the MSK Serverless cluster."
+            value       = aws_msk_serverless_cluster.this.cluster_name
+          }

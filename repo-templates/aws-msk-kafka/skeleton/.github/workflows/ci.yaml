@@ -1,0 +1,81 @@
+# Pull request checks.
+#
+# Lints the stack and its plans, then validates the stack against Wayfinder in
+# the preview environment without applying anything.
+#
+# A pull request deploys nothing, on purpose. Every Kafka cluster this
+# repository creates carries the tags applications find it by, so a preview
+# cluster per pull request would put a second cluster with the same tags into
+# an environment that already has one — applications there would fail
+# discovery until it was gone — and each one would bill for as long as the
+# pull request stayed open. The first real deploy is the merge to main.
+#
+# Every job that talks to Wayfinder declares `environment: preview`. GitHub
+# scopes the OIDC token to that environment, and the preview service account
+# trusts that token and no other, so a job that dropped the line could not sign
+# in at all. Declaring it is also what shows the job the WAYFINDER_* variables
+# Wayfinder set on the preview environment when it created this repository.
+#
+# This file is copied into your repository verbatim — Wayfinder does not
+# template it, so you can edit it like any other workflow.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  id-token: write # lets GitHub mint the OIDC token Wayfinder authenticates with
+
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Lint
+        run: make lint
+
+  validate:
+    name: Validate stack
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_SERVICE_ACCOUNT }}
+      WAYFINDER_ENVIRONMENT: ${{ vars.WAYFINDER_ENVIRONMENT }}
+      WF_REGION: ${{ vars.WF_REGION }}
+      WF_IDENTITY: ${{ vars.WF_IDENTITY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the Wayfinder CLI
+        run: bash .wayfinder/install-wf.sh
+
+      # Plans the deployment server-side and applies none of it. Note that when
+      # Wayfinder.yaml refers to a plan as `file:plans/...`, that plan IS
+      # published to the workspace catalogue even on a dry run, so the service
+      # account needs catalogue write as well as deploy rights.
+      - name: Validate the stack
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          source .wayfinder/ci.env
+
+          # The cloud identity sits in the same workspace as the service
+          # account, which is the middle segment of tenant:workspace:name.
+          workspace="$(cut -d: -f2 <<<"${WAYFINDER_SERVICE_ACCOUNT}")"
+
+          wf deploy --dry-run --non-interactive \
+            -i "${WF_STACK_NAME}-pr${PR_NUMBER}" \
+            -e "${WAYFINDER_ENVIRONMENT}" \
+            -f Wayfinder.yaml \
+            --identity "${WF_IDENTITY:-${workspace}/${WAYFINDER_ENVIRONMENT}/aws-${WAYFINDER_ENVIRONMENT}}" \
+            --region "${WF_REGION}"

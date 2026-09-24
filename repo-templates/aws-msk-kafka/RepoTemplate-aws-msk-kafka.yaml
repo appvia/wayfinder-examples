@@ -1,0 +1,28 @@
+# Registers the AWS MSK Kafka template with Wayfinder.
+#
+# This repository is public, so Wayfinder reads the template anonymously — no
+# GitHub connection is needed to register it or to preview what it renders.
+# Creating a repository from it does need a connected GitHub organisation.
+#
+#   wf apply -f RepoTemplate-aws-msk-kafka.yaml
+#   wf get repotemplate aws-msk-kafka -o yaml     # check status.manifest synced
+#
+apiVersion: sourcecontrol/v3
+kind: RepoTemplate
+metadata:
+  name: aws-msk-kafka
+  # Free-form axes for filtering the catalogue. Classification is spec.category.
+  labels:
+    cloud: aws
+    service: msk
+    family: wayfinder-golden-path
+    audience: platform-team
+spec:
+  url: https://github.com/appvia/wayfinder-examples.git
+  path: repo-templates/aws-msk-kafka
+  # Tracking a branch means every merge to it changes the template for the next
+  # team onboarded. `main` is the right place for that while the golden path is
+  # still moving; pin a tag once it has settled.
+  ref: main
+  displayName: AWS MSK Serverless Kafka
+  category: infrastructure
