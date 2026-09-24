@@ -6,7 +6,9 @@
 #
 #   wf apply -f RepoTemplate-python-app.yaml
 #   wf get repotemplate python-app -o yaml     # check status.manifest synced
-#   wf create stack payments --from-template python-app --input serviceName=payments --dry-run
+#   wf create stack payments --from-template python-app --input serviceName=payments \
+#     --input developEnvironment=dev --input previewEnvironment=dev \
+#     --input prodEnvironment=prod --dry-run
 #
 apiVersion: sourcecontrol/v3
 kind: RepoTemplate

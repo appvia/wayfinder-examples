@@ -63,8 +63,12 @@ short-lived token per run and Wayfinder exchanges it.
 
 ```bash
 TENANT=acme WORKSPACE=team-a REPO=acme/payments SERVICE=payments \
+  DEVELOP_ENV=dev PREVIEW_ENV=dev PROD_ENV=prod \
   ./setup-ci-service-accounts.sh
 ```
+
+The three environments are the ones picked for `developEnvironment`,
+`previewEnvironment` and `prodEnvironment` when the repository was created.
 
 See [`setup-ci-service-accounts.sh`](./setup-ci-service-accounts.sh) for what it
 creates and the imperative equivalents.

@@ -36,25 +36,22 @@ inputs:
   # A pull request only validates the stack in this environment; it deploys
   # nothing. Merging deploys develop, and a `v*` tag deploys production.
   - name: previewEnvironment
-    description: Environment a pull request validates the stack against, without deploying.
+    description: Environment a pull request validates the stack against, without deploying. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: developEnvironment
-    description: Environment deployed to when a pull request merges.
+    description: Environment deployed to when a pull request merges. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "dev"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: prodEnvironment
-    description: Environment deployed to when a `v*` tag is pushed.
+    description: Environment deployed to when a `v*` tag is pushed. Pick one this workspace has.
     type: string
-    optional: true
-    defaultValue: "prod"
-    pattern: "^[a-z][a-z0-9-]*$"
+    refType:
+      kind: Environment
 
   - name: region
     description: >-
