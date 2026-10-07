@@ -9,7 +9,12 @@
 #     -> critical only     : a Slack message pages the channel, linking the issue
 #
 # Nothing here is Wayfinder-shipped: the integration, webhook, WebAPIs, agent,
-# result schema and identity are all tenant-defined siblings of this file.
+# result schema, credentials and grants are all tenant-defined siblings of this
+# file.
+#
+# The workflow is itself a subject: its GitHub task is checked against the
+# Workflow's own grant in coderepo.yaml. It runs no wf/ commands, so it needs no
+# role binding.
 #
 # WORKSPACE-SCOPED, deliberately — the run engine is workspace-scoped, and the
 # WebhookInvocation that fires the run must be in the same workspace for the
@@ -24,7 +29,9 @@ spec:
   description: Investigate a SigNoz alert with an AI agent, then raise an issue and page Slack according to the severity it judges.
 
   # Static, author-fixed configuration — the same for every run, and the one place
-  # to change where issues and notifications land.
+  # to change where issues and notifications land. issueOwner/issueRepo name the
+  # repository in coderepo.yaml: the agent investigates its code, and issues are
+  # opened in it.
   config:
     issueOwner: REPLACE-GITHUB-ORG
     issueRepo: REPLACE-GITHUB-REPO
@@ -48,16 +55,21 @@ spec:
   tasks:
     # ---------------------------------------------------------------------------
     # 1. Investigate. Dispatches an AIConversation running the tenant's
-    #    incident-investigator agent, autonomously (no user to answer questions)
-    #    and with the read-only identity from identity.yaml. It finishes by calling
-    #    submit_result, whose payload becomes this task's output.
+    #    incident-investigator agent, autonomously (no user to answer questions).
+    #    The conversation runs as the agent itself, with the read-only roles
+    #    identity.yaml binds to it. It finishes by calling submit_result, whose
+    #    payload becomes this task's output.
     # ---------------------------------------------------------------------------
     investigate:
       action: ai/agent/incident-investigator
-      # tenant:name for a tenant-scoped account (tenant:workspace:name for a
-      # workspace one). Without this the conversation has no identity and every
-      # Wayfinder tool the agent calls fails.
-      serviceAccount: 'REPLACE-TENANT:my-team:incident-investigator'
+      ai:
+        # The repository the conversation works on. The agent's GitHub MCP reads
+        # this repository and no other, with a token minted for it alone; without
+        # a source context the agent gets none of its GitHub tools. The agent
+        # must hold read on it (coderepo.yaml).
+        sourceContext:
+          kind: github
+          repo: 'github.com/${{ .Config.issueOwner }}/${{ .Config.issueRepo }}'
       inputs:
         # "prompt" is required on an ai/agent task. This agent renders its opening
         # message from its own userPromptTemplate over the inputs below, so this
@@ -100,6 +112,10 @@ spec:
                 (has .Tasks.investigate.output.findings.severity (list "critical" "high")) }}
       action: incident-tools/webapi/github/create-issue
       inputs:
+        # The repository the GitHub token is minted for — the same one as owner
+        # and repo below. Checked against this Workflow's grant in coderepo.yaml.
+        - name: codeRepo
+          value: 'github.com/${{ .Config.issueOwner }}/${{ .Config.issueRepo }}'
         - name: owner
           value: '${{ .Config.issueOwner }}'
         - name: repo

@@ -1,9 +1,17 @@
 # Outbound connection to the GitHub REST API, so the incident-triage workflow can
 # open an issue when the agent judges an incident serious enough to need one.
 #
-# It authenticates with the same GitHub App installation the agent's read-only MCP
-# uses, so this example stores no GitHub credential at all — nothing to mint, hold
-# or rotate. Wayfinder mints a short-lived installation token per invocation.
+# It authenticates through the Wayfinder GitHub App installed on your
+# organisation, the same way the agent's read-only MCP does, so this example
+# stores no GitHub credential at all — nothing to mint, hold or rotate. Each
+# invocation names its repository in the codeRepo input, and Wayfinder mints a
+# short-lived token for that repository alone and sends it as a bearer token.
+#
+# The access level comes from the operation's method: POST needs write. The call
+# is refused unless whoever it is made for holds that access in the repository's
+# usableBy list — from a workflow task that is the Workflow itself, which
+# ../coderepo.yaml grants write. A `wf invoke webapi` by hand is checked against
+# you instead.
 #
 # A WebAPI is a reusable connection plus a set of templated operations. The
 # workflow reaches an operation by the action path
@@ -32,15 +40,11 @@ spec:
     headers:
       Accept: application/vnd.github+json
       X-GitHub-Api-Version: "2022-11-28"
-      # Reads from .Auth, so the token is redacted in the invocation record.
-      Authorization: Bearer ${{ .Auth.token }}
     auth:
-      # No stored credential: Wayfinder mints a fresh GitHub App installation
-      # token for each invocation using this GitHubOrg's installation, and
-      # exposes it to the templates above as ${{ .Auth.token }} — the same way a
-      # PlatformSecret field named "token" would be. Keep the ref in step with
-      # agents/githuborg.yaml, which the agent's read-only MCP also uses.
-      githubOrgRef: REPLACE-GITHUB-ORG
+      # No stored credential: the token is minted per invocation for the
+      # repository the operation's codeRepo input names, and Wayfinder sets the
+      # Authorization header from it (redacted in the invocation record).
+      codeRepoRef: '${{ .Inputs.codeRepo }}'
 
   operations:
     - name: create-issue
@@ -48,6 +52,11 @@ spec:
       method: POST
       path: /repos/${{ .Inputs.owner }}/${{ .Inputs.repo }}/issues
       inputs:
+        - name: codeRepo
+          description: The repository to open the issue in, as github.com/OWNER/REPO. The token is minted for this repository only, so it must be the same one owner and repo name.
+          type: string
+          refType:
+            kind: CodeRepo
         - name: owner
           description: Repository owner (organisation or user)
           type: string
