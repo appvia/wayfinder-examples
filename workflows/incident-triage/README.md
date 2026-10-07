@@ -22,15 +22,17 @@ SigNoz alert fires
 ```
 
 Everything here is **yours to own** — the integration, MCP servers, WebAPIs,
-agent, result schema and identity are all defined in these files rather than
-installed from Wayfinder's shipped catalogue, so this works on any tenant with
-nothing but the credentials you supply.
+agent, result schema, credentials and grants are all defined in these files
+rather than installed from Wayfinder's shipped catalogue, so this works on any
+tenant with nothing but the credentials you supply and a connected GitHub
+organisation.
 
-**Defined at tenant scope, invoked at workspace scope** — with two exceptions.
+**Defined at tenant scope, invoked at workspace scope** — with a few exceptions.
 The `Webhook` and the `Workflow` are workspace-scoped, so the run lands in the
 workspace whose team owns the incident response; a tenant-scoped webhook would
-also fall outside a workspace workflow's reach. Everything else is tenant-scoped
-and shared. See [Known limitations](#known-limitations).
+also fall outside a workspace workflow's reach. The `CodeRepo` is owned by that
+workspace too, and the agent's `RoleBinding` grants within it. Everything else is
+tenant-scoped and shared. See [Known limitations](#known-limitations).
 
 For the narrative walkthrough of how these pieces fit together, see
 [Worked Example: Incident Triage](https://on.wayfinder.run/docs/integrations/09-incident-triage).
@@ -42,13 +44,14 @@ For the narrative walkthrough of how these pieces fit together, see
 | `integration.yaml` | The custom `Integration` that owns everything below |
 | `agents/incident-investigator.yaml` | The `AIAgent`: read-only, one-shot, autonomous-capable |
 | `agents/datatype-incident-findings.yaml` | The `DataType` typing the agent's findings — including the `severity` the workflow branches on |
-| `agents/mcp-signoz.yaml` + `agents/secret-signoz-mcp.yaml` | SigNoz MCP server the agent queries observability data through |
-| `agents/mcp-github.yaml` + `agents/githuborg.yaml` | GitHub's hosted MCP server (read-only), authenticating with App-minted installation tokens |
+| `agents/mcp-signoz.yaml` + `agents/externalidentity-signoz-mcp.yaml` | SigNoz MCP server the agent queries observability data through, and its API-key credential |
+| `agents/mcp-github.yaml` | GitHub's hosted MCP server (read-only), with tokens minted per repository through the Wayfinder GitHub App |
+| `coderepo.yaml` | The GitHub repository the agent reads and issues are opened in, and who may use it |
 | `webhook-signoz-alerts.yaml` | The inbound endpoint SigNoz delivers alerts to |
-| `webapi-github.yaml` | Outbound: open a GitHub issue, on the same App installation — no stored credential |
+| `webapi-github.yaml` | Outbound: open a GitHub issue, through the same GitHub App — no stored credential |
 | `webapi-slack.yaml` | Outbound: post to Slack via `chat.postMessage` |
-| `secret-slack-token.yaml` | The one credential you supply |
-| `identity.yaml` | The read-only `ServiceAccount` the investigation runs as, and its `RoleBinding` |
+| `externalidentity-slack-token.yaml` | The Slack bot token, as a `BearerToken` external identity |
+| `identity.yaml` | The read-only `RoleBinding` granted to the agent, which its investigation runs as |
 | `workflow.yaml` | The `Workflow`: the trigger, the three tasks and the severity gates |
 | `slack-app-manifest.yaml` | Slack app manifest — pasted into Slack, **not** applied with `wf` |
 | `apply-signoz-webhook.sh` | Registers the webhook as a SigNoz notification channel (idempotent) |
@@ -56,15 +59,20 @@ For the narrative walkthrough of how these pieces fit together, see
 
 ## Prerequisites
 
-- A workspace named **`my-team`** (or change `metadata.workspace` on the webhook,
-  the workflow and the identity — the same value in all three).
-- A Wayfinder **GitHub App installation** approved on the organisation you set in
-  `agents/githuborg.yaml`.
+- A workspace named **`my-team`** (or change `my-team` everywhere it appears: the
+  webhook, the workflow, the role binding, the CodeRepo and the Workflow grant
+  in its `usableBy`).
+- The **GitHub integration** enabled and your organisation connected
+  (`wf enable integration github`, then **Install GitHub App** under
+  **Integrations → GitHub** in the portal), with the App granted the repository
+  you want issues opened in. A connection is made by that install flow and
+  cannot be applied from a file. See
+  [GitHub](https://on.wayfinder.run/docs/integrations/11-github).
 - A **SigNoz** instance (Cloud or self-hosted) with an admin-role API key.
 - A **Slack** app with the `chat:write` bot scope — see
-  [Setting up Slack](#setting-up-slack). This is the only credential the example
-  stores; GitHub is reached entirely through the App installation above, for both
-  reading code and opening issues.
+  [Setting up Slack](#setting-up-slack). Slack's token and SigNoz's key are the
+  only credentials the example stores; GitHub is reached entirely through the
+  App installation above, for both reading code and opening issues.
 
 ## Placeholders to fill in
 
@@ -72,13 +80,15 @@ Search for `REPLACE-` before applying:
 
 | Where | Replace with |
 | ----- | ------------ |
-| `workflow.yaml` → `spec.tasks.investigate.serviceAccount` | `<your-tenant>:my-team:incident-investigator` |
 | `workflow.yaml` → `spec.config` | Your GitHub org, repo and Slack channel |
-| `secret-slack-token.yaml` → `fields.token` | Your Slack bot token |
-| `agents/secret-signoz-mcp.yaml` | Your SigNoz API key and instance URL |
-| `agents/mcp-signoz.yaml` → `spec.endpoint` | Your SigNoz Cloud region, or your self-hosted MCP endpoint |
-| `agents/githuborg.yaml` | Your GitHub organisation and its App installation ID |
-| `webapi-github.yaml` + `agents/mcp-github.yaml` → `githubOrgRef` | The same organisation name |
+| `coderepo.yaml` | The same org and repo, and your GitHub connection's name (`wf get githuborgs`) |
+| `externalidentity-slack-token.yaml` → `bearerToken.token` | Your Slack bot token |
+| `agents/externalidentity-signoz-mcp.yaml` → `apiKey.headers` | Your SigNoz API key and instance URL |
+| `agents/mcp-signoz.yaml` → `spec.connection.baseURL` | Your SigNoz Cloud region, or your self-hosted MCP host — and the same host in the identity's `spec.service` |
+
+If the repository is already registered in Wayfinder (`wf get coderepos`), it is
+owned where it was registered: delete `coderepo.yaml` from your copy and add its
+two `usableBy` entries to the existing `CodeRepo` instead.
 
 ## Setting up Slack
 
@@ -88,7 +98,7 @@ Wayfinder needs exactly one thing from Slack: a **bot token with `chat:write`**.
    → **From an app manifest**, pick your workspace, and paste
    [`slack-app-manifest.yaml`](slack-app-manifest.yaml).
 2. **Install to Workspace**, then copy the **Bot User OAuth Token** (`xoxb-…`)
-   from *OAuth & Permissions* into `secret-slack-token.yaml`.
+   from *OAuth & Permissions* into `externalidentity-slack-token.yaml`.
 3. Set `spec.config.slackChannel` in `workflow.yaml`. Prefer the channel **ID**
    (*View channel details* → bottom of the About tab, e.g. `C0123456789`): it
    survives renames and is the only form that works for a private channel.
@@ -120,9 +130,11 @@ inviting), `channel_not_found` (typo, or a private channel it cannot see).
 
 ## Applying it
 
-`wf apply` sorts by dependency, so one command does the lot. It warns that it
-skipped the three files here that are not Wayfinder resources — this README, the
-Slack app manifest and the sample payload — which is expected:
+`wf apply` sorts by dependency, so one command does the lot — the agent before
+the role binding that names it, the workflow before the repository grant that
+names it. It warns that it skipped the files here that are not Wayfinder
+resources — this README, the Slack app manifest and the sample payload — which is
+expected:
 
 ```bash
 git clone https://github.com/appvia/wayfinder-examples.git
@@ -227,24 +239,38 @@ dependencies, which is why `notify_slack` depends on both `investigate` (for the
 findings) and `raise_issue` (for the issue URL).
 
 **The identity.** A triggered run has no interactive user, so the `investigate`
-task names a `ServiceAccount` and the agent's tools execute with exactly that
-account's RBAC — read-only here. Without one the agent has no identity to act as
-and every Wayfinder tool it calls fails. Wayfinder checks that whoever authors
-the workflow holds a superset of that account's permissions, so a run can never
-exceed the person who set it up.
+task's conversation runs as the agent itself, and its Wayfinder tools execute
+with exactly the roles bound to the agent — read-only `viewer` in `my-team` here
+(`identity.yaml`). Grant it nothing and every Wayfinder tool it calls is refused.
+Wayfinder checks that whoever authors the workflow holds a superset of the
+agent's permissions, so a run can never exceed the person who set it up.
+
+**GitHub, without a stored token.** Both the agent's GitHub MCP and the
+create-issue WebAPI authenticate through the Wayfinder GitHub App, with a
+short-lived token minted for one repository per call. The `investigate` task's
+`ai.sourceContext` names the repository the agent's conversation works on, and
+the `raise_issue` task names it again in its `codeRepo` input. Each use is
+checked against the repository's `usableBy` (`coderepo.yaml`): the agent holds
+`read` for its MCP calls, and the workflow holds `write`, because a `webapi`
+task is checked against the Workflow and opening an issue is a write.
 
 ## Known limitations
 
 - **Nothing here is environment-scoped.** `Workflow`, `Webhook` and their
   invocations support tenant and workspace scope only, and a run is placed at its
   Workflow's own scope. A workflow concerned with one environment still runs at the
-  workspace and reaches into the environment through its task ServiceAccount — which
-  means the run, the investigation and the alert payload are readable by the whole
-  workspace. See
+  workspace and reaches into the environment through the roles granted to its
+  agent — which means the run, the investigation and the alert payload are
+  readable by the whole workspace. See
   [Integrations & Workflows](https://on.wayfinder.run/docs/integrations/01-overview).
+- **The agent reads one repository.** A GitHub token is minted for the
+  conversation's repository alone, so the agent can investigate the code in the
+  repository the workflow names and nowhere else. To cover a service whose code
+  lives elsewhere, template `ai.sourceContext.repo` from the alert (for example
+  from its `service.name` label) and grant the agent read on each repository.
 - **Slack still needs a stored token.** GitHub is reached through an App
   installation, so nothing is stored for it; Slack has no equivalent, so its bot
-  token lives in a `PlatformSecret`.
+  token lives in an `ExternalIdentity`.
 - **The investigation is bounded at 60 model turns** — the agent's
   `spec.maxModelTurns` (the platform default is 20, and 200 is the ceiling). An
   investigation that exhausts its bound ends `Failed` rather than submitting

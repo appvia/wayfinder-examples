@@ -19,7 +19,12 @@
 #
 # Prerequisites: the resources in the sibling files here and in the parent
 # directory, with their placeholders filled in (SigNoz region and API key, your
-# GitHub organisation, Slack bot token).
+# GitHub organisation and repository, Slack bot token).
+#
+# The agent's tools run as the agent itself — an AIAgent is a subject you grant
+# roles to (see ../identity.yaml). Its GitHub tools work on the one repository
+# its conversation is given (the workflow task's ai.sourceContext), and only
+# because ../coderepo.yaml grants this agent read access to it.
 #
 # Apply everything together — wf apply resolves the dependency order itself:
 #   wf apply -f workflows/incident-triage/
@@ -59,7 +64,7 @@ spec:
       - "Anything else known: affected service, severity, when it started"
 
   # The incident details a conversation must / may carry in spec.context.
-  inputSchema:
+  inputs:
     - name: summary
       type: string
       description: "One-line summary of the incident — typically the alert name or title"
@@ -252,18 +257,11 @@ spec:
         - aws___read_documentation
         - aws___get_regional_availability
 
-  providers:
-    - name: anthropic-haiku
-      provider: anthropic
-      default: true
-      model: claude-haiku-4-5-20251001
-      enableThinking: true
-      thinkingBudget: 1024
-      enablePromptCaching: true
-    - name: anthropic-sonnet
-      provider: anthropic
-      model: claude-sonnet-4-6
-      default: false
-      enableThinking: true
-      thinkingBudget: 2048
-      enablePromptCaching: true
+  # The model the agent runs on, as "<provider>:<model>". A plain "anthropic"
+  # resolves to your tenant's own AIProvider of that name if you define one, and
+  # to Wayfinder-provided inference otherwise. Prompt caching is on by default.
+  # A workflow task can run the agent on a different model without editing it:
+  # set spec.tasks.<task>.ai.model, e.g. "anthropic:sonnet-4.6".
+  defaultModel:
+    model: anthropic:haiku-4.5
+    effort: low

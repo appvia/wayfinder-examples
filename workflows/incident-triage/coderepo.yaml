@@ -1,0 +1,48 @@
+# The GitHub repository this example works on: the agent reads its code through
+# the GitHub MCP, and the workflow opens issues in it through the GitHub WebAPI.
+#
+# Neither holds a GitHub credential. Wayfinder mints a short-lived token for this
+# repository alone, through the Wayfinder GitHub App installed on your
+# organisation, and only for a subject granted access below.
+#
+# ALREADY REGISTERED? Wayfinder registers a repository as a CodeRepo whenever
+# someone acts on it (links, creates or scaffolds it), and a repository is
+# registered once, in the workspace that owns it. If yours is already registered
+# (`wf get coderepos`), do not apply this file — delete it from your copy and add
+# the two usableBy entries below to the existing CodeRepo instead.
+#
+# Replace before applying:
+#   metadata.name      — github.<org>.<repo>, lowercased (the name Wayfinder
+#                        itself gives a repository)
+#   githubOrgRef.name  — your GitHubOrg connection's name: `wf get githuborgs`
+#                        lists it, usually github-<org>
+#   repo               — the repository name, without the organisation
+apiVersion: sourcecontrol/v3
+kind: CodeRepo
+metadata:
+  name: github.REPLACE-GITHUB-ORG.REPLACE-GITHUB-REPO
+  workspace: my-team
+spec:
+  githubOrgRef:
+    name: github-REPLACE-GITHUB-ORG
+  repo: REPLACE-GITHUB-REPO
+
+  # WHO MAY WORK ON IT. An empty list grants nobody anything, so each grant here
+  # is what one part of the example needs, and no more.
+  usableBy:
+    # The agent reads code, commits and pull requests through the GitHub MCP.
+    # Without this its GitHub tool calls are refused.
+    - subject:
+        kind: AIAgent
+        name: incident-investigator
+      access: read
+
+    # The workflow opens issues through the GitHub WebAPI. A POST needs write,
+    # and a webapi task is checked against the Workflow itself. Write is push and
+    # open pull requests too — the WebAPI only ever creates issues, but the grant
+    # is the repository's, so keep the WebAPI's operations to what you intend.
+    - subject:
+        kind: Workflow
+        name: incident-triage
+        workspace: my-team
+      access: write

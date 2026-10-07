@@ -5,10 +5,8 @@
 # incident-triage workflow.
 #
 # SigNoz's Terraform provider does not expose a channel resource, so channels are
-# managed through the REST API (POST/PUT /api/v1/channels). This is the
-# self-contained equivalent of what saas-envs/signoz/channels/apply-channels.sh
-# does for our own Slack channels — kept here so the example needs nothing from
-# the rest of the repo.
+# managed through the REST API (POST/PUT /api/v1/channels). The script is
+# self-contained, so the example needs nothing from the rest of the repo.
 #
 # Usage:
 #   SIGNOZ_ENDPOINT=https://your-tenant.eu.signoz.cloud \
