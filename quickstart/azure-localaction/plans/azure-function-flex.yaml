@@ -1,0 +1,159 @@
+apiVersion: cloudresources/v3
+kind: CloudResourcePlan
+metadata:
+  name: azure-function-flex
+  version: "0.1.0"
+spec:
+  cloud: azure
+  description: >-
+    A getting-started Azure Function on the Flex Consumption (serverless) plan.
+    Terraform provisions the function app, its managed identity and settings; a
+    companion LocalAction deploys the inline Python with a platform remote build
+    (the azurerm provider can't deploy code to Flex Consumption itself). Exposes a
+    public, anonymous HTTP endpoint. For real workloads, deploy a container image.
+
+  # CONSUMER: gets a cloud-native Azure user-assigned managed identity (no
+  # Kubernetes). The grant in the manifest becomes the role assignment Wayfinder
+  # applies to this identity. The plan attaches the identity with its resource ID
+  # and selects it at runtime with its client ID.
+  workloadIdentity:
+    identityType: AzureUserManagedIdentity
+    optional: false
+    azureResourceGroupTemplate: "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-rg"
+    restrictAccessTo:
+      trustedService: "Microsoft.Web/sites"
+      resourceIDTemplate: "${{ .Outputs.function_app_id }}"
+
+  # A LocalAction deploys the code, so it needs permission to push a deployment to
+  # this function app. Publish that as a consumption policy the manifest can grant.
+  # Scope it to the (single-instance) resource group rather than the function app:
+  # the function lives there, and it keeps the grant on the resource-group path.
+  consumptionPolicies:
+    - name: deploy
+      grantPermissions:
+        azure:
+          roleAssignmentsTemplate: |
+            - roleDefinitionName: Website Contributor
+              scope: /subscriptions/${{ .Cloud.Azure.Subscription }}/resourceGroups/${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-rg
+
+  terraform:
+    files:
+      - name: main.tf
+        template: |
+          # The shared resource group is created by the storage component; reuse it.
+          data "azurerm_resource_group" "this" {
+            name = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-rg"
+          }
+
+          # Flex Consumption keeps both its runtime state and its deployment package
+          # in a storage account + container. Names are globally unique, 3-24
+          # lowercase alphanumerics.
+          resource "random_id" "rt" {
+            byte_length = 3
+          }
+
+          locals {
+            rt_prefix = substr(lower(replace("${{ .Stack.Name }}${{ .Stack.Instance.Name }}fn", "/[^a-z0-9]/", "")), 0, 18)
+            rt_name   = "${local.rt_prefix}${random_id.rt.hex}"
+          }
+
+          resource "azurerm_storage_account" "runtime" {
+            name                     = local.rt_name
+            resource_group_name      = data.azurerm_resource_group.this.name
+            location                 = data.azurerm_resource_group.this.location
+            account_tier             = "Standard"
+            account_replication_type = "LRS"
+            min_tls_version          = "TLS1_2"
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+
+          resource "azurerm_storage_container" "deploy" {
+            name                  = "deployment"
+            storage_account_id    = azurerm_storage_account.runtime.id
+            container_access_type = "private"
+          }
+
+          # Flex Consumption (serverless) plan — pay only while the function runs,
+          # and not metered against classic App Service VM quota.
+          resource "azurerm_service_plan" "this" {
+            name                = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}-plan"
+            resource_group_name = data.azurerm_resource_group.this.name
+            location            = data.azurerm_resource_group.this.location
+            os_type             = "Linux"
+            sku_name            = "FC1"
+          }
+
+          resource "azurerm_function_app_flex_consumption" "this" {
+            name                = "${{ .Stack.Name }}-${{ .Stack.Instance.Name }}-${{ .Inputs.suffix }}"
+            resource_group_name = data.azurerm_resource_group.this.name
+            location            = data.azurerm_resource_group.this.location
+            service_plan_id     = azurerm_service_plan.this.id
+
+            storage_container_type      = "blobContainer"
+            storage_container_endpoint  = "${azurerm_storage_account.runtime.primary_blob_endpoint}${azurerm_storage_container.deploy.name}"
+            storage_authentication_type = "StorageAccountConnectionString"
+            storage_access_key          = azurerm_storage_account.runtime.primary_access_key
+
+            runtime_name           = "python"
+            runtime_version        = "3.11"
+            instance_memory_in_mb  = 2048
+            maximum_instance_count = 40
+
+            # Attach the Wayfinder-provisioned managed identity. This is what the
+            # client ID alone cannot do — attachment needs the identity's resource ID.
+            identity {
+              type         = "UserAssigned"
+              identity_ids = ["${{ .WorkloadIdentity.Azure.ResourceID }}"]
+            }
+
+            site_config {}
+
+            app_settings = {
+              # Selects WHICH assigned identity the running code authenticates as.
+              AZURE_CLIENT_ID = "${{ .WorkloadIdentity.Azure.ClientID }}"
+
+              # The application data storage to read/write, wired from the manifest.
+              DATA_ACCOUNT   = "${{ .Inputs.data_account }}"
+              DATA_CONTAINER = "${{ .Inputs.data_container }}"
+            }
+
+            tags = {
+              Application = "${{ .Stack.Name }}"
+              Environment = "${{ .Stack.Instance.Name }}"
+              ManagedBy   = "Wayfinder"
+            }
+          }
+      - name: outputs.tf
+        template: |
+          output "function_app_id" {
+            value = azurerm_function_app_flex_consumption.this.id
+          }
+          output "function_app_name" {
+            value = azurerm_function_app_flex_consumption.this.name
+          }
+          output "resource_group_name" {
+            value = data.azurerm_resource_group.this.name
+          }
+          output "function_url" {
+            value = "https://${azurerm_function_app_flex_consumption.this.default_hostname}/api/hello"
+          }
+
+  inputs:
+    - name: suffix
+      description: "Disambiguates the function within a stack instance. Final name: ${stack}-${instance}-${suffix}."
+      type: string
+      optional: true
+      defaultValue: "fn"
+    - name: data_account
+      description: "Name of the storage account this function should read/write. Wire it from a sibling component, e.g. ${{ .Components.datastorage.storage_account_name }}."
+      type: string
+      optional: false
+    - name: data_container
+      description: "Name of the blob container to read/write. Wire it from a sibling component, e.g. ${{ .Components.datastorage.container_name }}."
+      type: string
+      optional: false

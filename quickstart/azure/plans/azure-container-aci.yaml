@@ -12,8 +12,6 @@ spec:
     it. No code push, no build step, no registry credentials — the image is public
     and its source lives alongside this plan in image/. Exposes a public, anonymous
     HTTP endpoint you can curl. For real workloads, build and deploy your own image.
-  scope:
-    allWorkspaces: true
 
   # CONSUMER: gets a cloud-native Azure user-assigned managed identity (no
   # Kubernetes). The grant in the manifest becomes the role assignment Wayfinder

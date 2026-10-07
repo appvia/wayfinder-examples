@@ -1,0 +1,72 @@
+apiVersion: v1
+name: hello-wayfinder
+description: "A function that reads and writes a blob container — wired with one access grant, zero role assignments by hand."
+
+components:
+  # The storage account + container. A pure provider: it publishes consumption
+  # policies (read-only, read-write) but holds no identity itself.
+  datastorage:
+    type: CloudResource
+    plan: azure-storage-data@1.0.0
+
+  # The function. It gets its own cloud-native Azure managed identity and — because
+  # of the single grant below — permission to read and write `datastorage`. Wayfinder
+  # creates the identity and applies the role assignment; you write no credentials
+  # anywhere. Terraform provisions the (empty) Flex Consumption function app; the
+  # deploycode action below pushes the Python.
+  processor:
+    type: CloudResource
+    plan: azure-function-flex@0.1.0
+    workloadIdentity:
+      access:
+        - consumptionPolicy: read-write
+          to: datastorage
+    inputs:
+      - name: data_account
+        value: "${{ .Components.datastorage.storage_account_name }}"
+      - name: data_container
+        value: "${{ .Components.datastorage.container_name }}"
+
+  # The Azure Functions platform (unlike AWS Lambda) can't be given its code by
+  # Terraform on the Flex Consumption plan, so we deploy it with a one-line action
+  # that uploads ./src and asks the platform to install the Python dependencies for
+  # us (a remote build — no build step of your own). It runs with the short-lived
+  # credentials of the deployment's cloud target; no credentials are stored.
+  deploycode:
+    type: LocalAction
+    needs: [processor]
+    withAccess:
+      - targetName: cloud
+    localAction:
+      run: |
+        set -euo pipefail
+        APP="${{ .Components.processor.function_app_name }}"
+        RG="${{ .Components.processor.resource_group_name }}"
+        SUB="${{ .Cloud.Azure.Subscription }}"
+
+        # Zip the function source (host.json, requirements.txt, function_app.py).
+        rm -f ./app.zip
+        (cd ./src && zip -q -r ../app.zip .)
+
+        # The identity Wayfinder brokers for this action was just granted its role,
+        # and Azure RBAC can take a few minutes to propagate before the CLI can use it
+        # for a control-plane deploy. Re-login and retry the deploy until it goes
+        # through (the platform does a remote build, installing requirements.txt).
+        deploy() {
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" --tenant "$AZURE_TENANT_ID" \
+            --federated-token "$(cat "$AZURE_FEDERATED_TOKEN_FILE")" \
+            --output none 2>/dev/null || return 1
+          az functionapp deployment source config-zip \
+            --subscription "$SUB" --resource-group "$RG" --name "$APP" \
+            --src ./app.zip --build-remote true
+        }
+        # Azure can take several minutes to propagate a brand-new identity's role
+        # assignment far enough for the CLI to use it, so give it a generous budget.
+        for i in $(seq 1 36); do
+          if deploy; then exit 0; fi
+          echo "brokered access still propagating, retry $i/36..."
+          sleep 20
+        done
+        echo "deployment did not succeed after retries; re-run 'wf deploy' to retry" >&2
+        exit 1

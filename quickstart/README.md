@@ -64,67 +64,84 @@ The flow is identical on both clouds. Pick your cloud's folder, then:
 
 > Use the **same region** everywhere below, and make sure your AWS CLI default region
 > matches it (`export AWS_REGION=<region>` if unsure) — otherwise the state bucket fails
-> with `IllegalLocationConstraintException`. `YOUR-STATE-BUCKET` must be globally unique
+> with `IllegalLocationConstraintException`. The bucket is named `wf-tfstate-<account-id>`
+> unless you pass `--bucket` to name it yourself; either way it must be globally unique
 > across all of AWS.
 
 ```bash
 cd aws
 
-# 1. Connect your cloud — scoped, with provisioning permissions AND a state store.
+# 1. Connect your cloud — scoped, with provisioning permissions.
+#    --usable-for says what the identity is for and caps what any grant over it can
+#    confer; the quick-start only provisions cloud resources, so that is all it asks for.
 #    AdministratorAccess is demo-only; bind a scoped policy set for anything real.
 wf setup cloudaccess --cloud aws \
-  --cloud-access aws-quickstart \
+  --external-identity aws-quickstart \
+  --scope tenant \
   --aws-account 123456789012 --region REGION \
-  --all-workspaces \
+  --usable-for tfprovisioning \
+  --usable-by role:deployer@* \
   --role-binding arn:aws:iam::aws:policy/AdministratorAccess \
-  --state-store --state-store-bucket YOUR-STATE-BUCKET \
   --apply
 
-# 2. Register the plans (once per tenant, or after a version bump)
+# 2. Create the bucket this account's Terraform/OpenTofu state lives in, and let the
+#    identity from step 1 use it. Step 1 prints this command for you when it finishes.
+wf setup statestore --cloud-account aws:123456789012 --region REGION --apply
+
+# 3. Register the plans (once per tenant, or after a version bump)
 wf apply -f ./plans/
 
-# 3. Create a workspace and environment (a fresh tenant has none).
+# 4. Create a workspace and environment (a fresh tenant has none).
 wf create workspace quickstart --key qstr
 wf use workspace qstr
 wf create environment dev -w qstr
 wf use env dev
 
-# 4. Deploy — a new instance needs the cloud target (match step 1's region).
+# 5. Deploy — a new instance needs the cloud target (match step 1's region).
 wf up -f ./Wayfinder.yaml -i hello \
-  --cloud-access aws-quickstart \
+  --identity aws-quickstart \
   --region REGION
 ```
 
 ### Azure
 
-> Run `az login` first. `--state-store-storage-account` must be globally unique across all
-> of Azure and **3–24 lowercase letters/numbers only**. Use the **same region** everywhere.
+> Run `az login` first. The storage account holding the state is named for your subscription
+> unless you pass `--storage-account`, which must be globally unique across all of Azure and
+> **3–24 lowercase letters/numbers only**. Use the **same region** everywhere.
 
 ```bash
 cd azure
 
-# 1. Connect your cloud — scoped, with provisioning permissions AND a state store.
+# 1. Connect your cloud — scoped, with provisioning permissions.
+#    --usable-for says what the identity is for and caps what any grant over it can
+#    confer; the quick-start only provisions cloud resources, so that is all it asks for.
 #    Owner is demo-only; for anything real bind Contributor + User Access Administrator.
 wf setup cloudaccess --cloud azure \
-  --cloud-access azure-quickstart \
+  --external-identity azure-quickstart \
+  --scope tenant \
   --azure-subscription 00000000-0000-0000-0000-000000000000 --region uksouth \
-  --all-workspaces \
+  --usable-for tfprovisioning \
+  --usable-by role:deployer@* \
   --role-binding Owner \
-  --state-store --state-store-storage-account YOURSTATEACCOUNT --state-store-bucket tfstate \
   --apply
 
-# 2. Register the plans (once per tenant, or after a version bump)
+# 2. Create the container this subscription's Terraform/OpenTofu state lives in, and let
+#    the identity from step 1 use it. Step 1 prints this command for you when it finishes.
+wf setup statestore \
+  --cloud-account azure:00000000-0000-0000-0000-000000000000 --region uksouth --apply
+
+# 3. Register the plans (once per tenant, or after a version bump)
 wf apply -f ./plans/
 
-# 3. Create a workspace and environment (a fresh tenant has none).
+# 4. Create a workspace and environment (a fresh tenant has none).
 wf create workspace quickstart --key qstr
 wf use workspace qstr
 wf create environment dev -w qstr
 wf use env dev
 
-# 4. Deploy — a new instance needs the cloud target (match step 1's region).
+# 5. Deploy — a new instance needs the cloud target (match step 1's region).
 wf up -f ./Wayfinder.yaml -i hello \
-  --cloud-access azure-quickstart \
+  --identity azure-quickstart \
   --region uksouth
 ```
 
@@ -161,13 +178,19 @@ your own published image (the quick-start image's source is in `azure/image/`).
 # Remove the deployment (function, store, and the identity created for them)
 wf down -i hello
 
-# Optional: remove the cloud-side setup from step 1 — re-run step 1 with --remove.
+# Optional: remove the cloud-side setup from steps 1 and 2 — re-run each with --remove.
+# The state bucket must be empty (it is, once `wf down` has removed the deployment) and its
+# name given in full, since deleting it destroys the record of anything still deployed.
 # AWS:
-wf setup cloudaccess --cloud aws --cloud-access aws-quickstart \
+wf setup cloudaccess --cloud aws --external-identity aws-quickstart --scope tenant \
   --aws-account 123456789012 --region REGION --remove
+wf setup statestore --cloud-account aws:123456789012 --remove \
+  --delete-state-bucket wf-tfstate-123456789012
 # Azure:
-wf setup cloudaccess --cloud azure --cloud-access azure-quickstart \
+wf setup cloudaccess --cloud azure --external-identity azure-quickstart --scope tenant \
   --azure-subscription 00000000-0000-0000-0000-000000000000 --region uksouth --remove
+wf setup statestore --cloud-account azure:00000000-0000-0000-0000-000000000000 --remove \
+  --delete-state-bucket tfstate
 ```
 
 ## Note on getting your code running
