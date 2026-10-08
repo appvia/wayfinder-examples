@@ -2,7 +2,10 @@
 # account in ci/service-account.yaml. Nothing is created.
 #
 # Repository variables: WAYFINDER_SERVER (https://api.on.wayfinder.run), WAYFINDER_TENANT
-# (appvia) and WF_TOOLBOX_IMAGE (quay.io/appvia-wayfinder/wftoolbox:latest, the released toolbox).
+# (appvia) and WF_TOOLBOX_IMAGE, the toolbox of the release production runs, e.g.
+# quay.io/appvia-wayfinder/wftoolbox:v3.3.2. Pin a version and move it with each release: the
+# released :latest tag is not maintained (it is a 2023 build whose wf cannot log in as a service
+# account).
 name: Check examples against Wayfinder
 
 on:
