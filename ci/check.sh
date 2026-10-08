@@ -2,27 +2,17 @@
 # Checks the examples against Wayfinder: a server dry run of each directory below, so the API
 # validates every resource in full and nothing is created.
 #
-#   ci/check.sh
+#   WAYFINDER_WORKSPACE=<workspace> ci/check.sh
 #
-# Pull requests run this against the production Wayfinder, as the service account in
-# ci/service-account.yaml: what a customer applies is checked by what they apply it to.
-#
-# The plans are tenant-scoped as published, but they are checked as plans in the CHECK_WORKSPACE
-# workspace (default wfci): a plan can live at either scope and is validated the same way at both,
-# and a workspace role is all the service account then needs.
-#
-# A directory belongs here once everything in it validates without anything it refers to having
-# to exist first, and the service account's role covers creating it. Not yet listed:
-#   workflows/incident-triage   names a GitHubOrg, a workspace and credentials that would need to
-#                               exist in the checking tenant first, and kinds beyond the plans
-#                               workspace.cataloguemanagement covers
+# The plans are checked as plans in WAYFINDER_WORKSPACE: a plan validates the same way at tenant
+# and workspace scope.
 #
 # Extra wf arguments (for example `--profile prod`) go in WF_ARGS.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-workspace="${CHECK_WORKSPACE:-wfci}"
+workspace="${WAYFINDER_WORKSPACE:?set WAYFINDER_WORKSPACE to the workspace to check the plans in}"
 dirs=(
   quickstart/aws/plans
   quickstart/azure/plans
