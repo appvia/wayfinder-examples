@@ -1,0 +1,3 @@
+# Runtime artifacts created by `wf up` and the deploycode action
+.wfup
+app.zip

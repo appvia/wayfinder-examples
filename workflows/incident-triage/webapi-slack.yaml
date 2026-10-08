@@ -20,10 +20,11 @@ spec:
     baseURL: https://slack.com/api
     headers:
       Content-Type: application/json; charset=utf-8
-      # Sourced from the secret below, so it is redacted in the invocation record.
-      Authorization: Bearer ${{ .Auth.token }}
     auth:
-      secretRef: slack-token
+      # The BearerToken identity in externalidentity-slack-token.yaml. Wayfinder
+      # sets the Authorization header from it on every request and redacts it in
+      # the invocation record, so there is no credential to template here.
+      externalIdentityRef: slack-token
 
   operations:
     - name: post-message

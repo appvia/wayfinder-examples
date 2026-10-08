@@ -1,0 +1,32 @@
+# Credentials for the SigNoz Cloud MCP server. An APIKey ExternalIdentity sends
+# each of its headers on every request — the key is the header name. SigNoz
+# Cloud's MCP server expects exactly these two headers.
+#
+# Replace both values before applying:
+#   SIGNOZ-API-KEY — an API key created by a SigNoz workspace admin
+#                    (Settings → API Keys; admin-only).
+#   X-SigNoz-URL   — your SigNoz instance URL, e.g. https://acme.us.signoz.cloud
+#
+# The values are stored encrypted and never returned by the API. Once applied,
+# you can blank them ("") in your copy of this file: a blank value on update
+# keeps the stored one, so the file can live in source control without the key.
+#
+# No usableBy is set, so whoever applies this is granted every purpose in
+# usableFor. Anyone else who saves an MCP or agent that uses it needs their own
+# grant — add a usableBy entry for them (see the ExternalIdentity reference).
+apiVersion: integrations/v3
+kind: ExternalIdentity
+metadata:
+  name: signoz-mcp
+spec:
+  type: APIKey
+  description: API key and instance URL for the SigNoz Cloud MCP server
+  # Must match the host of spec.connection.baseURL in mcp-signoz.yaml — change
+  # both together if you are not on the eu region or are self-hosted.
+  service: mcp.eu.signoz.cloud
+  usableFor:
+    - mcp
+  apiKey:
+    headers:
+      SIGNOZ-API-KEY: "REPLACE-WITH-YOUR-SIGNOZ-API-KEY"
+      X-SigNoz-URL: "https://REPLACE-ME.eu.signoz.cloud"

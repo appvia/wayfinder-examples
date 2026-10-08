@@ -1,0 +1,38 @@
+# Server dry run of the examples (ci/check.sh) against Wayfinder. Nothing is created.
+#
+# Repository variables: WAYFINDER_SERVER, WAYFINDER_TENANT and WF_TOOLBOX_IMAGE.
+name: Check examples against Wayfinder
+
+on:
+  pull_request:
+    paths: ["quickstart/**", "workflows/**", "ci/**", ".github/workflows/check-examples.yaml"]
+
+permissions:
+  contents: read
+  id-token: write # lets GitHub mint the OIDC token Wayfinder authenticates with
+
+concurrency:
+  group: check-examples-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The workspace the check runs in: its service account lives there, and the plans are checked
+  # there.
+  WAYFINDER_WORKSPACE: wayfinder-examples
+
+jobs:
+  dry-run:
+    name: Dry run against Wayfinder
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ vars.WF_TOOLBOX_IMAGE }}
+    env:
+      WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
+      WAYFINDER_TENANT: ${{ vars.WAYFINDER_TENANT }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Dry run
+        env:
+          # tenant:workspace:name
+          WAYFINDER_SERVICE_ACCOUNT: ${{ vars.WAYFINDER_TENANT }}:${{ env.WAYFINDER_WORKSPACE }}:github-wayfinder-examples-check
+        run: bash ci/check.sh

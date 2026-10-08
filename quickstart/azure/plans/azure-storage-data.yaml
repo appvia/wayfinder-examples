@@ -6,8 +6,6 @@ metadata:
 spec:
   cloud: azure
   description: "Azure Storage Account + blob container for application data, with read-only / read-write consumption policies (Azure RBAC role assignments) that other components can be granted."
-  scope:
-    allWorkspaces: true
   inputs:
     - name: container_name
       description: "Name of the blob container to create and expose."

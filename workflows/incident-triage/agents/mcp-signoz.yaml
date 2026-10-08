@@ -1,9 +1,11 @@
 # SigNoz Cloud's hosted MCP server, giving AI agents query access to your
 # metrics, logs, traces and alerts.
 #
-# Replace <region> in the endpoint with your SigNoz Cloud region (us, eu, in —
+# Replace the region in the base URL with your SigNoz Cloud region (us, eu, in —
 # shown under Settings → Ingestion in SigNoz). Self-hosted SigNoz also serves
-# MCP; point the endpoint at your instance instead.
+# MCP; point the base URL at your instance instead. Either way, keep the host in
+# step with spec.service in externalidentity-signoz-mcp.yaml: Wayfinder only
+# presents a credential to the host it was created for.
 #
 # Which tools each agent may call is curated on the agent side — see the
 # spec.mcps binding in incident-investigator.yaml.
@@ -15,9 +17,11 @@ spec:
   integrationRef: incident-tools
   vendor: SigNoz
   description: SigNoz Cloud observability — metrics, logs, traces, alerts and dashboards.
-  endpoint: https://mcp.eu.signoz.cloud/mcp
   enabled: true
-  auth:
-    # Sends each field of the referenced Generic secret as an HTTP header.
-    mode: apikey
-    secretRef: signoz-mcp
+  connection:
+    baseURL: https://mcp.eu.signoz.cloud
+    auth:
+      # An APIKey ExternalIdentity: Wayfinder sends each of its headers on every
+      # request, and never returns the values through the API.
+      externalIdentityRef: signoz-mcp
+  path: /mcp

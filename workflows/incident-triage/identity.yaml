@@ -1,27 +1,23 @@
-# The identity the investigation runs as.
+# The permissions the investigation runs with.
 #
-# A workflow-triggered run has no interactive user to borrow permissions from, so
-# the workflow's ai/agent task names a ServiceAccount and the conversation's tools
-# execute with exactly that account's RBAC. Without one, every Wayfinder tool the
-# agent calls fails — there is no identity to impersonate.
+# A workflow-triggered run has no interactive user to borrow permissions from.
+# An ai/agent task's conversation runs as the agent itself — an AIAgent is a
+# first-class subject — so the roles bound to the agent are exactly what its
+# Wayfinder tools may do. Grant nothing and every Wayfinder tool the agent calls
+# is refused.
 #
 # Read-only on purpose. The agent observes and reports; the only things that write
 # anything are the GitHub and Slack tasks, which act with their own credentials
-# under a condition you authored. The "viewer" role is read across the tenant's
-# workspaces and environments — narrow it to specific workspaces with a
-# workspace-scoped RoleBinding if you would rather bound what an investigation
-# can see.
+# under a condition you authored. metadata.workspace places the binding, so this
+# grants "viewer" in my-team and nowhere else — widen it with further bindings if
+# an investigation needs to see other workspaces.
 #
-# Wayfinder checks that whoever authors the Workflow holds a superset of this
-# account's permissions, so a run can never exceed the person who set it up.
-apiVersion: org/v3
-kind: ServiceAccount
-metadata:
-  name: incident-investigator
-  workspace: my-team
-spec:
-  description: Read-only identity for hands-off incident investigations
----
+# The binding names the agent it grants to, and Wayfinder checks it exists;
+# `wf apply -f` on the whole directory applies the agent first.
+#
+# Wayfinder checks that whoever authors the Workflow holds a superset of the
+# permissions of every identity its tasks run as — here, this agent — so a run can
+# never exceed the person who set it up.
 apiVersion: org/v3
 kind: RoleBinding
 metadata:
@@ -31,6 +27,5 @@ spec:
   roles:
     - viewer
   subject:
-    kind: ServiceAccount
+    kind: AIAgent
     name: incident-investigator
-    workspace: my-team

@@ -1,0 +1,29 @@
+# The Slack bot token the chat.postMessage WebAPI authenticates with.
+#
+# Create the Slack app from slack-app-manifest.yaml, install it, and paste the
+# Bot User OAuth Token (starts "xoxb-") below. See "Setting up Slack" in
+# README.md for the full walkthrough, including which channel identifier to use
+# and how to test the token before running the workflow.
+#
+# A BearerToken ExternalIdentity is presented as "Authorization: Bearer <token>"
+# on every request, and that header is redacted in each invocation record. The
+# token is stored encrypted and never returned by the API. Once applied, you can
+# replace the bearerToken block with "bearerToken: {}" in your copy: an empty
+# block on update keeps the stored token, so the file can live in source control
+# without it.
+#
+# No usableBy is set, so whoever applies this is granted every purpose in
+# usableFor. Anyone else who saves a WebAPI that uses it needs their own grant.
+apiVersion: integrations/v3
+kind: ExternalIdentity
+metadata:
+  name: slack-token
+spec:
+  type: BearerToken
+  description: Slack bot token for posting critical-incident notifications
+  # Must match the host of the WebAPI's baseURL (webapi-slack.yaml).
+  service: slack.com
+  usableFor:
+    - webapi
+  bearerToken:
+    token: "REPLACE-WITH-YOUR-SLACK-BOT-TOKEN"

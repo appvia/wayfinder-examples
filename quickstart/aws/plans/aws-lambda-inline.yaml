@@ -11,8 +11,6 @@ spec:
     Exposes a public Lambda function URL so you can invoke it with curl. For
     real workloads, deploy a container image instead — this plan exists purely
     to get you to a working, identity-wired function in minutes.
-  scope:
-    allWorkspaces: true
 
   # This Lambda is a CONSUMER: it gets a cloud-native AWS IAM role (no Kubernetes
   # required). Permissions to reach OTHER components (e.g. a bucket) are granted

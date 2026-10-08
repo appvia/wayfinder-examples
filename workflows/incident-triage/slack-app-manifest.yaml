@@ -4,7 +4,7 @@
 # At api.slack.com/apps choose "Create New App" -> "From an app manifest", pick
 # your workspace, and paste this. Then "Install to Workspace" and copy the Bot
 # User OAuth Token (starts "xoxb-") from OAuth & Permissions into
-# secret-slack-token.yaml.
+# externalidentity-slack-token.yaml.
 #
 # Why these settings:
 #   chat:write         — post messages. The only scope strictly required.
