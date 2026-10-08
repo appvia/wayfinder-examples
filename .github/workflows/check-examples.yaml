@@ -1,8 +1,8 @@
 # Server dry run of the examples (ci/check.sh) against the production Wayfinder, as the service
 # account in ci/service-account.yaml. Nothing is created.
 #
-# Repository variables: WAYFINDER_SERVER (https://on.wayfinder.run), WAYFINDER_TENANT (appvia)
-# and WF_TOOLBOX_IMAGE (the released wftoolbox image).
+# Repository variables: WAYFINDER_SERVER (https://api.on.wayfinder.run), WAYFINDER_TENANT
+# (appvia) and WF_TOOLBOX_IMAGE (quay.io/appvia-wayfinder/wftoolbox:latest, the released toolbox).
 name: Check examples against Wayfinder
 
 on:
