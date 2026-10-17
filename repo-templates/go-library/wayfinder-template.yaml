@@ -1,6 +1,8 @@
-# The smallest useful template: one input, a handful of files, no deployment.
-# Not everything scaffolded is a deployable service — a library has no
-# Wayfinder.yaml and never gets deployed, but a template still saves the setup.
+# The smallest useful template: one required input, a handful of files, no
+# deployment. Not everything scaffolded is a deployable service — a library has
+# no Wayfinder.yaml and never gets deployed, but a template still saves the
+# setup. It also demonstrates formSteps: the scaffolding form shows the pages
+# declared below instead of one page of every input.
 name: Go library
 description: A Go module with tests and CI, for shared code rather than a deployable service
 icon: library
@@ -14,6 +16,26 @@ inputs:
     description: Go package name, used for the directory and the package clause.
     type: string
     pattern: "^[a-z][a-z0-9]*$"
+  - name: description
+    description: One line saying what this library is for.
+    type: string
+    optional: true
+    defaultValue: Shared Go code
+  - name: includeExamples
+    description: Include an examples/ directory in the generated repository.
+    type: bool
+    optional: true
+    defaultValue: false
+
+# Author-declared pages of the scaffolding form. `includeExamples` is
+# deliberately named by no page: Wayfinder appends an unplaced input to the
+# last page when the template syncs, and the Wayfinder smoke suite asserts
+# exactly that against this template — place it and that suite fails.
+formSteps:
+  - title: Package
+    description: What this library is called and what it is for.
+    inputs: [packageName, description]
+  - title: Contents
 
 skeleton:
   path: skeleton
