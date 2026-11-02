@@ -62,9 +62,7 @@ The flow is identical on both clouds. Pick your cloud's folder, then:
 
 ### AWS
 
-> Use the **same region** everywhere below, and make sure your AWS CLI default region
-> matches it (`export AWS_REGION=<region>` if unsure) — otherwise the state bucket fails
-> with `IllegalLocationConstraintException`. The bucket is named `wf-tfstate-<account-id>`
+> Use the **same region** everywhere below. The bucket is named `wf-tfstate-<account-id>`
 > unless you pass `--bucket` to name it yourself; either way it must be globally unique
 > across all of AWS.
 
