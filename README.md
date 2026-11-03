@@ -14,7 +14,7 @@ $ cd ./quickstart/aws/
 $ wf up
 ```
 
-`main` matches the Wayfinder release in production. Changes the next release needs wait on the `vnext` branch until that release ships.
+`main` matches the Wayfinder release in production. Changes for the next upcoming release are on `vnext`.
 
 For full documentation, see the [quickstart readme](./quickstart/README.md) or [https://on.wayfinder.run/docs/getting-started/01-quick-start](https://on.wayfinder.run/docs/getting-started/01-quick-start).
 
