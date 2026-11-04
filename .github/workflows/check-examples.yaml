@@ -1,11 +1,21 @@
 # Server dry run of the examples (ci/check.sh) against Wayfinder. Nothing is created.
 #
-# Repository variables: WAYFINDER_SERVER, WAYFINDER_TENANT and WF_TOOLBOX_IMAGE.
+# main is what production runs, so only main and pull requests into it are checked here. vnext,
+# the examples as the next release needs them, is checked against Wayfinder's develop branch from
+# the appvia/wayfinder repository, and merged into main when that release reaches production.
+#
+# Repository variables: WAYFINDER_SERVER and WAYFINDER_TENANT.
 name: Check examples against Wayfinder
 
 on:
   pull_request:
+    branches: [main]
     paths: ["quickstart/**", "workflows/**", "ci/**", ".github/workflows/check-examples.yaml"]
+  # The server moves on without a change here (a field is dropped, or the oldest CLI it accepts goes
+  # up), so check the examples on main every week as well.
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,7 +35,9 @@ jobs:
     name: Dry run against Wayfinder
     runs-on: ubuntu-latest
     container:
-      image: ${{ vars.WF_TOOLBOX_IMAGE }}
+      # The latest release, as a user following the quick start would install. A pinned version
+      # stops working once the server stops accepting it.
+      image: quay.io/appvia-wayfinder/wftoolbox:latest
     env:
       WAYFINDER_SERVER: ${{ vars.WAYFINDER_SERVER }}
       WAYFINDER_TENANT: ${{ vars.WAYFINDER_TENANT }}
