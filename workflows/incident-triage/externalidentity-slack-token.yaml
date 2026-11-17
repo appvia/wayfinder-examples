@@ -12,9 +12,13 @@
 # block on update keeps the stored token, so the file can live in source control
 # without it.
 #
-# No usableBy is set, so whoever applies this is granted every purpose in
-# usableFor. Anyone else who saves a WebAPI that uses it needs their own grant.
-apiVersion: integrations/v3
+# It lives at the tenant, as does the WebAPI that names it, so anyone who may
+# call that WebAPI — including the workflow's notify_slack task — sends with it.
+#
+# Rather not store a Slack token at all? Turn on Wayfinder's Slack integration
+# and use the slack-api WebAPI it creates instead, which posts as @Wayfinder
+# with your tenant's Slack connection — see the incident-triage docs.
+apiVersion: integrations/v3.1
 kind: ExternalIdentity
 metadata:
   name: slack-token
@@ -23,7 +27,5 @@ spec:
   description: Slack bot token for posting critical-incident notifications
   # Must match the host of the WebAPI's baseURL (webapi-slack.yaml).
   service: slack.com
-  usableFor:
-    - webapi
   bearerToken:
     token: "REPLACE-WITH-YOUR-SLACK-BOT-TOKEN"

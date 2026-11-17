@@ -15,14 +15,11 @@
 #
 # ── WHAT DECIDES WHO REACHES THESE ────────────────────────────────────────────
 #
-# `usableFor` is what an identity is for at all, and no grant can reach past it. Both of
-# these are `directaccess` only: they hand credentials to a person or an agent to use
-# themselves. Neither is `tfprovisioning`, so neither can be deployed through - that is
-# the `aws-${{ .Inputs.firstEnvironment }}` identity the vend created.
-#
-# `usableBy` then says who. A role grantee means "whoever holds this role here", and
-# bindings.yaml is what decides who that is.
-${{ if .Inputs.accountId }}apiVersion: integrations/v3
+# The roles people hold where an identity lives decide who may use it: both of these
+# live in the ${{ .Inputs.firstEnvironment }} environment, so whoever holds `deployer` there,
+# or across the workspace, may use them, and bindings.yaml is what decides who that is.
+# An AI agent uses one only when its own spec.access.externalIdentities names it.
+${{ if .Inputs.accountId }}apiVersion: integrations/v3.1
 kind: ExternalIdentity
 metadata:
   name: aws-readonly
@@ -35,19 +32,12 @@ spec:
     account: "${{ .Inputs.accountId }}"
     roleARN: arn:aws:iam::${{ .Inputs.accountId }}:role/wf-${{ .Workspace }}-${{ .Inputs.firstEnvironment }}-aws-readonly
     defaultRegion: ${{ .Inputs.region }}
-  usableFor:
-    - directaccess
-  usableBy:
-    # The scope fields of a role grantee are inert on an environment-scoped identity -
-    # this object's own workspace and environment are what the role is required in.
-    - role:
-        role: deployer
 ---
-# Held by one AI agent and nobody else. Read-only is the whole of what proving a module
-# upgrade takes: what Terraform reports it would do, plus whether the application still
-# works afterwards. An agent that could also write could make the evidence agree with
-# itself.
-apiVersion: integrations/v3
+# For the module-upgrade-prove AI agent, which names it in its spec.access.externalIdentities.
+# Read-only is the whole of what proving a module upgrade takes: what Terraform reports it
+# would do, plus whether the application still works afterwards. An agent that could also
+# write could make the evidence agree with itself.
+apiVersion: integrations/v3.1
 kind: ExternalIdentity
 metadata:
   name: module-upgrade-inspector
@@ -60,10 +50,4 @@ spec:
     account: "${{ .Inputs.accountId }}"
     roleARN: arn:aws:iam::${{ .Inputs.accountId }}:role/wf-${{ .Workspace }}-${{ .Inputs.firstEnvironment }}-module-upgrade-inspector
     defaultRegion: ${{ .Inputs.region }}
-  usableFor:
-    - directaccess
-  usableBy:
-    - subject:
-        kind: AIAgent
-        name: module-upgrade-prove
 ${{ end }}

@@ -7,11 +7,12 @@
 # invocation names its repository in the codeRepo input, and Wayfinder mints a
 # short-lived token for that repository alone and sends it as a bearer token.
 #
-# The access level comes from the operation's method: POST needs write. The call
-# is refused unless whoever it is made for holds that access in the repository's
-# usableBy list — from a workflow task that is the Workflow itself, which
-# ../coderepo.yaml grants write. A `wf invoke webapi` by hand is checked against
-# you instead.
+# The access level comes from the operation's method: POST needs write. The
+# repository must be connected, at write, to the workspace the call is made
+# from. A workflow task must name it literally in codeRepo (see workflow.yaml),
+# and whoever saves or fires the workflow must be able to write it: deployer or
+# workspace.member in that workspace. A `wf invoke webapi` by hand is checked
+# against your own role instead.
 #
 # A WebAPI is a reusable connection plus a set of templated operations. The
 # workflow reaches an operation by the action path
@@ -26,7 +27,7 @@
 # quote characters, and toJson emits a correctly-escaped JSON string. Writing
 # "${{ .Inputs.body }}" instead would produce invalid JSON the moment the agent
 # used a second line.
-apiVersion: integrations/v3
+apiVersion: integrations/v3.1
 kind: WebAPI
 metadata:
   name: github
@@ -44,7 +45,7 @@ spec:
       # No stored credential: the token is minted per invocation for the
       # repository the operation's codeRepo input names, and Wayfinder sets the
       # Authorization header from it (redacted in the invocation record).
-      codeRepoRef: '${{ .Inputs.codeRepo }}'
+      repoRef: '${{ .Inputs.codeRepo }}'
 
   operations:
     - name: create-issue
@@ -56,7 +57,7 @@ spec:
           description: The repository to open the issue in, as github.com/OWNER/REPO. The token is minted for this repository only, so it must be the same one owner and repo name.
           type: string
           refType:
-            kind: CodeRepo
+            kind: GitRepoConnection
         - name: owner
           description: Repository owner (organisation or user)
           type: string

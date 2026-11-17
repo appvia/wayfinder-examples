@@ -1,4 +1,4 @@
-# Example tenant-scoped AIAgent: an incident investigator.
+# Example AIAgent: an incident investigator, living in the my-team workspace.
 #
 # Give it the details of a production incident (e.g. a SigNoz alert) and it
 # investigates end-to-end: observability data from SigNoz, the affected
@@ -21,18 +21,27 @@
 # directory, with their placeholders filled in (SigNoz region and API key, your
 # GitHub organisation and repository, Slack bot token).
 #
-# The agent's tools run as the agent itself — an AIAgent is a subject you grant
-# roles to (see ../identity.yaml). Its GitHub tools work on the one repository
-# its conversation is given (the workflow task's ai.sourceContext), and only
-# because ../coderepo.yaml grants this agent read access to it.
+# The agent's tools run as the agent itself, holding only the roles it declares
+# in spec.access.roles and only where a role binding grants them (see
+# ../identity.yaml). Its GitHub tools work on the one repository its github MCP
+# binding names, which must be connected to my-team.
 #
 # Apply everything together — wf apply resolves the dependency order itself:
 #   wf apply -f workflows/incident-triage/
-apiVersion: inference/v3
+apiVersion: inference/v3.1
 kind: AIAgent
 metadata:
   name: incident-investigator
+  # An agent lives in a workspace — the one its workflow runs in.
+  workspace: my-team
 spec:
+  # What the agent may use. It declares viewer across my-team, read-only on
+  # purpose, and holds it once ../identity.yaml binds it. A conversation or
+  # workflow run with this agent will not start until it is granted.
+  access:
+    roles:
+      - role: viewer
+
   # This agent is one-shot and read-only — it reaches a diagnosis and finishes
   # via submit_result with no interactive back-and-forth. That makes it safe to
   # run hands-off from a workflow "ai/agent" task (which runs with no user).
@@ -41,27 +50,19 @@ spec:
   supportsAutonomous: true
 
   # An investigation covers a lot of ground — alert, traces, logs, metrics, the
-  # Wayfinder estate, then the code — and each tool call costs a model turn. The
-  # default of 20 is too tight for that, so raise it. An investigation that hits
-  # this bound fails without submitting findings, so it is a ceiling to be
-  # generous with, not a target.
-  maxModelTurns: 60
+  # Wayfinder estate, then the code — and each tool call costs a model turn. 60
+  # is room for that while bounding a runaway run below the default of 200. An
+  # autonomous investigation that hits this bound fails without submitting
+  # findings, so it is a ceiling to be generous with, not a target.
+  limits:
+    maxTurns: 60
 
-  applicableScopes:
-    - tenant
-    - workspace
-    - environment
-
-  agentDescription:
-    description: |
-      Investigates a production incident or alert end-to-end: pulls the firing alert and
-      surrounding logs, traces and metrics from SigNoz, maps the affected Wayfinder stack
-      instances and their cloud/kubernetes resources, inspects recent code and pull requests
-      on GitHub, and consults AWS documentation — then reports a diagnosis with evidence and
-      suggested remediation. Read-only: it never changes any system it inspects.
-    userInputsNeeded:
-      - "Alert or incident summary (e.g. the SigNoz alert name)"
-      - "Anything else known: affected service, severity, when it started"
+  description: |
+    Investigates a production incident or alert end-to-end: pulls the firing alert and
+    surrounding logs, traces and metrics from SigNoz, maps the affected Wayfinder stack
+    instances and their cloud/kubernetes resources, inspects recent code and pull requests
+    on GitHub, and consults AWS documentation — then reports a diagnosis with evidence and
+    suggested remediation. Read-only: it never changes any system it inspects.
 
   # The incident details a conversation must / may carry in spec.context.
   inputs:
@@ -205,13 +206,13 @@ spec:
           - docs
 
   # MCP servers, each with an explicit tool allowlist so a newly-advertised
-  # upstream tool is reviewed before it reaches the agent. Entries that stop
-  # being advertised are silently dropped. The signoz and github MCPs are the
-  # tenant-scoped registrations in the sibling files; aws-knowledge is the
-  # platform-shipped AWS documentation MCP.
+  # upstream tool is reviewed before it reaches the agent (an empty list would
+  # mean every tool). Entries that stop being advertised are silently dropped.
+  # The signoz and github MCPs are the tenant-scoped registrations in the sibling
+  # files; aws-knowledge is the platform-shipped AWS documentation MCP.
   mcps:
+    # Called as the MCP's default identity, signoz-mcp.
     - mcp: signoz
-      toolScope: selected
       tools:
         # Alerts
         - signoz_list_alerts
@@ -239,8 +240,13 @@ spec:
         # Dashboards (read-only)
         - signoz_list_dashboards
         - signoz_get_dashboard
+    # The repository the GitHub MCP reads for this agent, and the only one: a
+    # token is minted for it alone. It must be connected to my-team, and whoever
+    # saves or starts the agent needs deployer or workspace.member there. The
+    # same repository the workflow opens issues in (workflow.yaml).
     - mcp: github
-      toolScope: selected
+      repo:
+        name: github.com/REPLACE-GITHUB-ORG/REPLACE-GITHUB-REPO
       tools:
         - search_repositories
         - search_code
@@ -251,7 +257,6 @@ spec:
         - get_pull_request
         - get_pull_request_files
     - mcp: wayfinder/aws-knowledge
-      toolScope: selected
       tools:
         - aws___search_documentation
         - aws___read_documentation
