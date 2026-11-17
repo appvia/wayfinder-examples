@@ -2,15 +2,16 @@
 #
 # A workflow-triggered run has no interactive user to borrow permissions from.
 # An ai/agent task's conversation runs as the agent itself — an AIAgent is a
-# first-class subject — so the roles bound to the agent are exactly what its
-# Wayfinder tools may do. Grant nothing and every Wayfinder tool the agent calls
-# is refused.
+# first-class subject — holding a role only where it both declares it (the
+# agent's spec.access.roles) and a binding grants it. The run will not start
+# until every role the agent declares is granted.
 #
 # Read-only on purpose. The agent observes and reports; the only things that write
 # anything are the GitHub and Slack tasks, which act with their own credentials
 # under a condition you authored. metadata.workspace places the binding, so this
-# grants "viewer" in my-team and nowhere else — widen it with further bindings if
-# an investigation needs to see other workspaces.
+# grants "viewer" in my-team and nowhere else. The binding must match what the
+# agent declares exactly: viewer across the whole workspace here, so narrowing
+# one to an environment means changing both.
 #
 # The binding names the agent it grants to, and Wayfinder checks it exists;
 # `wf apply -f` on the whole directory applies the agent first.
@@ -28,4 +29,5 @@ spec:
     - viewer
   subject:
     kind: AIAgent
+    workspace: my-team
     name: incident-investigator

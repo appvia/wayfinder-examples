@@ -11,10 +11,11 @@
 # you can blank them ("") in your copy of this file: a blank value on update
 # keeps the stored one, so the file can live in source control without the key.
 #
-# No usableBy is set, so whoever applies this is granted every purpose in
-# usableFor. Anyone else who saves an MCP or agent that uses it needs their own
-# grant — add a usableBy entry for them (see the ExternalIdentity reference).
-apiVersion: integrations/v3
+# Who may use it is decided by the roles people hold where it lives — here the
+# tenant. mcp-signoz.yaml names it as the MCP's default identity, so whoever
+# saves that MCP must be able to use it, and in doing so confers it on every
+# agent that uses the MCP: nobody who saves or starts the agent needs it too.
+apiVersion: integrations/v3.1
 kind: ExternalIdentity
 metadata:
   name: signoz-mcp
@@ -24,8 +25,6 @@ spec:
   # Must match the host of spec.connection.baseURL in mcp-signoz.yaml — change
   # both together if you are not on the eu region or are self-hosted.
   service: mcp.eu.signoz.cloud
-  usableFor:
-    - mcp
   apiKey:
     headers:
       SIGNOZ-API-KEY: "REPLACE-WITH-YOUR-SIGNOZ-API-KEY"

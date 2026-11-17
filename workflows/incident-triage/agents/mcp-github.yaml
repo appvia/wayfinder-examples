@@ -1,18 +1,14 @@
 # GitHub's hosted MCP server, giving AI agents access to repositories, code
 # search, commits and pull requests.
 #
-# It stores no credential. auth.codeRepoRef makes each call use a short-lived
-# token Wayfinder mints for ONE repository — the repository of the conversation
-# using the MCP, which the workflow's investigate task sets in
-# ai.sourceContext — through the Wayfinder GitHub App installed on your
-# organisation. The codeRepo input is left unanswered on purpose: Wayfinder
-# fills it from the conversation, and nothing else can. A conversation with no
-# repository gets none of this MCP's tools.
+# It stores no credential. auth.repo makes each call use a short-lived token
+# Wayfinder mints for ONE repository, through the Wayfinder GitHub App installed
+# on your organisation. Which repository is each agent's to say, in its own
+# binding of this MCP (spec.mcps[].repo in incident-investigator.yaml), and the
+# repository must be connected to the agent's workspace.
 #
-# A call is refused unless the agent has access in the repository's usableBy
-# list — see ../coderepo.yaml, which grants incident-investigator read.
-# Prerequisites: the GitHub integration enabled and your organisation connected
-# (see ../README.md).
+# Prerequisites: the GitHub integration enabled, your organisation connected,
+# and the repository connected to the workspace (see ../README.md).
 #
 # The same repository also backs the create-issue WebAPI (../webapi-github.yaml),
 # so the whole example holds no GitHub credential. This MCP covers the agent's
@@ -23,7 +19,7 @@
 # tools — a belt-and-braces guarantee that agents bound to this MCP cannot
 # write to your repositories, on top of the per-agent tool allowlist (see
 # spec.mcps in incident-investigator.yaml) and the read-only access level below.
-apiVersion: integrations/v3
+apiVersion: integrations/v3.1
 kind: MCP
 metadata:
   name: github
@@ -32,18 +28,11 @@ spec:
   vendor: GitHub
   description: GitHub repositories, code search, commits and pull requests (read-only).
   enabled: true
-  inputs:
-    - name: codeRepo
-      type: string
-      optional: true
-      refType:
-        kind: CodeRepo
-      description: The repository the MCP works on. Each conversation sets it to its own repository.
   connection:
     baseURL: https://api.githubcopilot.com
     auth:
-      codeRepoRef: '${{ .Inputs.codeRepo }}'
-      # The most a call may do in the repository. "read" is the default; it is
-      # spelled out because this MCP must never write.
-      access: read
+      repo:
+        # The most a call may do in the repository. "read" is the default; it is
+        # spelled out because this MCP must never write.
+        access: read
   path: /mcp/readonly

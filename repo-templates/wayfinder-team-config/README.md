@@ -87,7 +87,7 @@ and a new identity needs both in the same pull request:
   present for the identity of that name. `access/Wayfinder.yaml` is the stack that
   deploys it, through the environment's own `aws-<environment>` identity.
 - **`manifests/identities-<environment>.yaml`** creates the `ExternalIdentity` naming
-  that role, and says who may use it.
+  that role, in the environment whose roles decide who may use it.
 
 Nothing flows from the Terraform into the manifest. A role's name and ARN follow from
 the account id and a name the team chose, so the manifest writes them out. The account
@@ -96,10 +96,10 @@ the repository and passes the id in, so the identities are declared from the fir
 commit. Scaffolded without one, the manifest is empty and `wf apply` skips it; the team
 adds the identities once the account exists.
 
-The two starters are `aws-readonly`, granted to whoever holds `deployer` in the
-environment, and `module-upgrade-inspector`, granted to the `module-upgrade-prove` AI
-agent alone. Both are `usableFor: [directaccess]` and neither is `tfprovisioning`, so
-neither can be deployed through.
+The two starters are `aws-readonly` and `module-upgrade-inspector`, the latter for the
+`module-upgrade-prove` AI agent. Both live in the environment, so whoever holds
+`deployer` there (or across the workspace) may use them; an AI agent uses one only when
+its own `spec.access.externalIdentities` names it. Both IAM roles are read-only.
 
 ## What the CI does
 

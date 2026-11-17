@@ -9,7 +9,7 @@
 #
 # Which tools each agent may call is curated on the agent side — see the
 # spec.mcps binding in incident-investigator.yaml.
-apiVersion: integrations/v3
+apiVersion: integrations/v3.1
 kind: MCP
 metadata:
   name: signoz
@@ -21,7 +21,12 @@ spec:
   connection:
     baseURL: https://mcp.eu.signoz.cloud
     auth:
-      # An APIKey ExternalIdentity: Wayfinder sends each of its headers on every
-      # request, and never returns the values through the API.
-      externalIdentityRef: signoz-mcp
+      identity:
+        # An APIKey ExternalIdentity: Wayfinder sends each of its headers on
+        # every request, and never returns the values through the API.
+        types: [APIKey]
+        # The identity an agent calls the MCP as when its binding names none.
+        # Whoever saves this MCP must be able to use it, and confers it on every
+        # agent that uses the MCP.
+        defaultRef: signoz-mcp
   path: /mcp

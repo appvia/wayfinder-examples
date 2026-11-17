@@ -12,9 +12,10 @@
 # result schema, credentials and grants are all tenant-defined siblings of this
 # file.
 #
-# The workflow is itself a subject: its GitHub task is checked against the
-# Workflow's own grant in coderepo.yaml. It runs no wf/ commands, so it needs no
-# role binding.
+# The workflow reaches only the repositories its tasks name, and each must be
+# connected to my-team: raise_issue names the issue repository literally, so
+# whoever saves or fires the workflow needs deployer or workspace.member there.
+# It runs no wf/ commands, so it declares no roles and needs no role binding.
 #
 # WORKSPACE-SCOPED, deliberately — the run engine is workspace-scoped, and the
 # WebhookInvocation that fires the run must be in the same workspace for the
@@ -28,10 +29,10 @@ metadata:
 spec:
   description: Investigate a SigNoz alert with an AI agent, then raise an issue and page Slack according to the severity it judges.
 
-  # Static, author-fixed configuration — the same for every run, and the one place
-  # to change where issues and notifications land. issueOwner/issueRepo name the
-  # repository in coderepo.yaml: the agent investigates its code, and issues are
-  # opened in it.
+  # Static, author-fixed configuration — the same for every run. issueOwner and
+  # issueRepo name the repository issues are opened in: the same one the agent's
+  # github MCP binding reads (agents/incident-investigator.yaml), and the same
+  # one raise_issue's codeRepo input names literally below.
   config:
     issueOwner: REPLACE-GITHUB-ORG
     issueRepo: REPLACE-GITHUB-REPO
@@ -54,22 +55,15 @@ spec:
 
   tasks:
     # ---------------------------------------------------------------------------
-    # 1. Investigate. Dispatches an AIConversation running the tenant's
+    # 1. Investigate. Dispatches an AIConversation running the workspace's
     #    incident-investigator agent, autonomously (no user to answer questions).
-    #    The conversation runs as the agent itself, with the read-only roles
-    #    identity.yaml binds to it. It finishes by calling submit_result, whose
-    #    payload becomes this task's output.
+    #    The conversation runs as the agent itself, with the read-only role it
+    #    declares and identity.yaml binds to it. Its GitHub MCP reads the
+    #    repository its own binding names, so the task sets none. It finishes by
+    #    calling submit_result, whose payload becomes this task's output.
     # ---------------------------------------------------------------------------
     investigate:
       action: ai/agent/incident-investigator
-      ai:
-        # The repository the conversation works on. The agent's GitHub MCP reads
-        # this repository and no other, with a token minted for it alone; without
-        # a source context the agent gets none of its GitHub tools. The agent
-        # must hold read on it (coderepo.yaml).
-        sourceContext:
-          kind: github
-          repo: 'github.com/${{ .Config.issueOwner }}/${{ .Config.issueRepo }}'
       inputs:
         # "prompt" is required on an ai/agent task. This agent renders its opening
         # message from its own userPromptTemplate over the inputs below, so this
@@ -113,9 +107,11 @@ spec:
       action: incident-tools/webapi/github/create-issue
       inputs:
         # The repository the GitHub token is minted for — the same one as owner
-        # and repo below. Checked against this Workflow's grant in coderepo.yaml.
+        # and repo below. It must be a literal, not a template: what a workflow
+        # can reach is read from the workflow itself when it is saved. It must be
+        # connected to my-team at write.
         - name: codeRepo
-          value: 'github.com/${{ .Config.issueOwner }}/${{ .Config.issueRepo }}'
+          value: github.com/REPLACE-GITHUB-ORG/REPLACE-GITHUB-REPO
         - name: owner
           value: '${{ .Config.issueOwner }}'
         - name: repo
