@@ -1,0 +1,2 @@
+// Package examples shows how to use ${{ .Inputs.packageName }}.
+package examples

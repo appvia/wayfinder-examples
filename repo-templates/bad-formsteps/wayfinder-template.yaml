@@ -1,0 +1,14 @@
+# A deliberately broken template: its one form step names an input that does
+# not exist (`serivceName` for `serviceName`). Registering it in Wayfinder
+# fails the manifest sync with an error naming the misspelled input, and the
+# Wayfinder smoke suite asserts exactly that. Never scaffold from it, and do
+# not fix the spelling — the typo is the fixture.
+name: Bad form steps
+description: Sync-failure fixture for the Wayfinder smoke suite. Do not use.
+inputs:
+  - name: serviceName
+    description: Name of the service.
+    type: string
+formSteps:
+  - title: Service
+    inputs: [serivceName]
