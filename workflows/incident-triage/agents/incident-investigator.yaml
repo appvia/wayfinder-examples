@@ -208,11 +208,13 @@ spec:
   # MCP servers, each with an explicit tool allowlist so a newly-advertised
   # upstream tool is reviewed before it reaches the agent (an empty list would
   # mean every tool). Entries that stop being advertised are silently dropped.
-  # The signoz and github MCPs are the tenant-scoped registrations in the sibling
-  # files; aws-knowledge is the platform-shipped AWS documentation MCP.
+  # Each entry names an MCPConnection in my-team: signoz and github are the
+  # connections in the sibling mcpconnection-*.yaml files, to the tenant MCPs
+  # beside them; wayfinder/aws-knowledge is the platform-shipped AWS
+  # documentation MCP, which needs no connection.
   mcps:
-    # Called as the MCP's default identity, signoz-mcp.
-    - mcp: signoz
+    # Signs in with the SigNoz MCP's tenant default, signoz-mcp.
+    - connection: signoz
       tools:
         # Alerts
         - signoz_list_alerts
@@ -240,13 +242,9 @@ spec:
         # Dashboards (read-only)
         - signoz_list_dashboards
         - signoz_get_dashboard
-    # The repository the GitHub MCP reads for this agent, and the only one: a
-    # token is minted for it alone. It must be connected to my-team, and whoever
-    # saves or starts the agent needs deployer or workspace.member there. The
-    # same repository the workflow opens issues in (workflow.yaml).
-    - mcp: github
-      repo:
-        name: github.com/REPLACE-GITHUB-ORG/REPLACE-GITHUB-REPO
+    # Reads the one repository the connection names (mcpconnection-github.yaml):
+    # a token is minted for it alone.
+    - connection: github
       tools:
         - search_repositories
         - search_code
@@ -256,7 +254,7 @@ spec:
         - list_pull_requests
         - get_pull_request
         - get_pull_request_files
-    - mcp: wayfinder/aws-knowledge
+    - connection: wayfinder/aws-knowledge
       tools:
         - aws___search_documentation
         - aws___read_documentation

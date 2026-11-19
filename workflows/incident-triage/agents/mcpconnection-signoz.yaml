@@ -1,0 +1,22 @@
+# my-team's connection to the SigNoz MCP (mcp-signoz.yaml). An MCP is installed
+# at the tenant; each workspace connects it with the credential its agents call
+# the server as, and an agent names the connection, not the MCP.
+#
+# This one signs in with the MCP's tenant default, the signoz-mcp identity
+# (externalidentity-signoz-mcp.yaml). To give my-team a key of its own instead,
+# drop useTenantDefault and name an APIKey identity in my-team, issued to the
+# same host:
+#   credential:
+#     identity: signoz-readonly
+#
+# Wayfinder tests the connection as it is saved, so
+#   wf get mcpconnection signoz -w my-team -o yaml
+# shows whether the key works and which tools it sees before the agent runs.
+apiVersion: integrations/v3
+kind: MCPConnection
+metadata:
+  name: signoz
+  workspace: my-team
+spec:
+  mcp: signoz
+  useTenantDefault: true

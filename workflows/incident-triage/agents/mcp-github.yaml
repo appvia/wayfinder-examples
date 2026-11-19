@@ -3,9 +3,9 @@
 #
 # It stores no credential. auth.repo makes each call use a short-lived token
 # Wayfinder mints for ONE repository, through the Wayfinder GitHub App installed
-# on your organisation. Which repository is each agent's to say, in its own
-# binding of this MCP (spec.mcps[].repo in incident-investigator.yaml), and the
-# repository must be connected to the agent's workspace.
+# on your organisation. Which repository is each workspace's to say, in its
+# connection to this MCP (spec.repo in mcpconnection-github.yaml), and the
+# repository must be connected to that workspace.
 #
 # Prerequisites: the GitHub integration enabled, your organisation connected,
 # and the repository connected to the workspace (see ../README.md).
