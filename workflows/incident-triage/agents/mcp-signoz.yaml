@@ -7,8 +7,10 @@
 # step with spec.service in externalidentity-signoz-mcp.yaml: Wayfinder only
 # presents a credential to the host it was created for.
 #
-# Which tools each agent may call is curated on the agent side — see the
-# spec.mcps binding in incident-investigator.yaml.
+# An MCP is installed at the tenant; a workspace's agents reach it through that
+# workspace's MCPConnection (mcpconnection-signoz.yaml). Which tools each agent
+# may call is curated on the agent side — see spec.mcps in
+# incident-investigator.yaml.
 apiVersion: integrations/v3.1
 kind: MCP
 metadata:
@@ -25,8 +27,10 @@ spec:
         # An APIKey ExternalIdentity: Wayfinder sends each of its headers on
         # every request, and never returns the values through the API.
         types: [APIKey]
-        # The identity an agent calls the MCP as when its binding names none.
-        # Whoever saves this MCP must be able to use it, and confers it on every
-        # agent that uses the MCP.
-        defaultRef: signoz-mcp
+        # The tenant's own credential for the server, which a workspace's
+        # connection may choose (useTenantDefault) instead of supplying its own.
+        # Whoever saves this MCP must be able to use the identity, and shares it
+        # with every workspace that connects the MCP that way.
+        default:
+          identity: signoz-mcp
   path: /mcp

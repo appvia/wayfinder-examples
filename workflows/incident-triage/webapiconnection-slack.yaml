@@ -1,0 +1,16 @@
+# my-team's connection to the Slack web API (webapi-slack.yaml). A web API that
+# signs in is installed at the tenant, and a workflow in a workspace calls it
+# through that workspace's connection: by default the one named like the web
+# API — this one, so workflow.yaml's notify_slack task needs no change.
+#
+# It signs in with the identity the web API names in the tenant, slack-token
+# (externalidentity-slack-token.yaml). The GitHub web API needs no connection:
+# it signs in to a repository through the GitHub App, not as an identity.
+apiVersion: integrations/v3
+kind: WebAPIConnection
+metadata:
+  name: slack
+  workspace: my-team
+spec:
+  webAPI: slack
+  useTenantDefault: true

@@ -12,9 +12,10 @@
 # keeps the stored one, so the file can live in source control without the key.
 #
 # Who may use it is decided by the roles people hold where it lives — here the
-# tenant. mcp-signoz.yaml names it as the MCP's default identity, so whoever
-# saves that MCP must be able to use it, and in doing so confers it on every
-# agent that uses the MCP: nobody who saves or starts the agent needs it too.
+# tenant. mcp-signoz.yaml names it as the MCP's default credential, so whoever
+# saves that MCP must be able to use it, and in doing so shares it with every
+# workspace connection that sets useTenantDefault (mcpconnection-signoz.yaml):
+# nobody who saves the connection, or saves or starts the agent, needs it too.
 apiVersion: integrations/v3.1
 kind: ExternalIdentity
 metadata:

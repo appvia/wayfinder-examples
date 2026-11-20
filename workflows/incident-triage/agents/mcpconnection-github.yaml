@@ -1,0 +1,16 @@
+# my-team's connection to the GitHub MCP (mcp-github.yaml), naming the one
+# repository the agent reads: each call carries a token Wayfinder mints for it
+# alone, through the Wayfinder GitHub App. No secret is stored.
+#
+# The repository must be connected to my-team, and whoever saves this needs
+# deployer or workspace.member there. It is the same repository the workflow
+# opens issues in (workflow.yaml). Access stays at the MCP's "read".
+apiVersion: integrations/v3
+kind: MCPConnection
+metadata:
+  name: github
+  workspace: my-team
+spec:
+  mcp: github
+  repo:
+    name: github.com/REPLACE-GITHUB-ORG/REPLACE-GITHUB-REPO
